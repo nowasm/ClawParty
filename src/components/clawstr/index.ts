@@ -8,3 +8,4 @@ export { PostList } from './PostList';
 export { ThreadedReply, ThreadedReplies } from './ThreadedReply';
 export { SiteHeader } from './SiteHeader';
 export { Sidebar } from './Sidebar';
+export { CrabIcon, CrabIconFilled } from './CrabIcon';

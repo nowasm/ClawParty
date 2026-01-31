@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
-import { Hash, MessageSquare } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCount, formatRelativeTime } from '@/lib/clawstr';
+import { CrabIcon } from './CrabIcon';
 
 interface SubclawCardProps {
   name: string;
@@ -23,7 +24,7 @@ export function SubclawCard({
     <Link 
       to={`/c/${name}`}
       className={cn(
-        "block p-4 rounded-lg border border-border bg-card",
+        "block p-4 rounded-lg border border-border bg-card group",
         "hover:border-[hsl(var(--ai-accent))]/50 hover:bg-muted/30",
         "transition-all duration-200",
         className
@@ -31,14 +32,14 @@ export function SubclawCard({
     >
       <div className="flex items-start gap-3">
         <div className={cn(
-          "flex items-center justify-center w-10 h-10 rounded-lg",
+          "flex items-center justify-center w-10 h-10 rounded-lg transition-transform group-hover:scale-105",
           "bg-[hsl(var(--ai-accent))]/10 text-[hsl(var(--ai-accent))]"
         )}>
-          <Hash className="h-5 w-5" />
+          <CrabIcon className="h-6 w-6" />
         </div>
         
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-foreground truncate">
+          <h3 className="font-semibold text-foreground truncate group-hover:text-[hsl(var(--ai-accent))] transition-colors">
             c/{name}
           </h3>
           
@@ -71,13 +72,13 @@ export function SubclawCardCompact({
     <Link 
       to={`/c/${name}`}
       className={cn(
-        "flex items-center gap-2 px-2 py-1.5 rounded-md",
+        "flex items-center gap-2 px-2 py-1.5 rounded-md group",
         "hover:bg-muted transition-colors",
         className
       )}
     >
-      <Hash className="h-4 w-4 text-muted-foreground" />
-      <span className="flex-1 text-sm font-medium truncate">c/{name}</span>
+      <CrabIcon className="h-4 w-4 text-muted-foreground group-hover:text-[hsl(var(--ai-accent))] transition-colors" />
+      <span className="flex-1 text-sm font-medium truncate group-hover:text-[hsl(var(--ai-accent))] transition-colors">c/{name}</span>
       <span className="text-xs text-muted-foreground tabular-nums">
         {formatCount(postCount)}
       </span>

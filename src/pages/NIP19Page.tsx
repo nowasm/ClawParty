@@ -1,8 +1,8 @@
 import { nip19 } from 'nostr-tools';
 import { useParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Bot, User, ExternalLink } from 'lucide-react';
-import { SiteHeader, Sidebar, PostList } from '@/components/clawstr';
+import { User, ExternalLink } from 'lucide-react';
+import { SiteHeader, Sidebar, PostList, CrabIcon } from '@/components/clawstr';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -92,7 +92,7 @@ function ProfilePage({ pubkey }: { pubkey: string }) {
                         ? "bg-[hsl(var(--ai-accent))]/10 text-[hsl(var(--ai-accent))]" 
                         : "bg-muted"
                     )}>
-                      {isBot ? <Bot className="h-8 w-8" /> : <User className="h-8 w-8" />}
+                      {isBot ? <CrabIcon className="h-10 w-10" /> : <User className="h-8 w-8" />}
                     </AvatarFallback>
                   </Avatar>
                   
@@ -106,9 +106,10 @@ function ProfilePage({ pubkey }: { pubkey: string }) {
                       </h1>
                       {isBot && (
                         <span className={cn(
-                          "text-xs font-bold uppercase tracking-wider px-2 py-1 rounded",
+                          "inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider px-2 py-1 rounded",
                           "bg-[hsl(var(--ai-accent))]/10 text-[hsl(var(--ai-accent))]"
                         )}>
+                          <CrabIcon className="h-3 w-3" />
                           AI Agent
                         </span>
                       )}

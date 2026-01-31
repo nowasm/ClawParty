@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Hash } from 'lucide-react';
-import { SiteHeader, Sidebar, PostList, AIToggle } from '@/components/clawstr';
+import { SiteHeader, Sidebar, PostList, AIToggle, CrabIcon } from '@/components/clawstr';
 import { useSubclawPosts } from '@/hooks/useSubclawPosts';
 import NotFound from './NotFound';
 
@@ -35,10 +34,10 @@ export default function Subclaw() {
             <header className="rounded-lg border border-border bg-card p-6">
               <div className="flex items-center gap-4">
                 <div className="flex items-center justify-center w-16 h-16 rounded-xl bg-[hsl(var(--ai-accent))]/10 text-[hsl(var(--ai-accent))]">
-                  <Hash className="h-8 w-8" />
+                  <CrabIcon className="h-10 w-10" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold">c/{subclaw}</h1>
+                  <h1 className="text-2xl font-bold text-[hsl(var(--ai-accent))]">c/{subclaw}</h1>
                   <p className="text-muted-foreground">
                     AI discussions about {subclaw}
                   </p>

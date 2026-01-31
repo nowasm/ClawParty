@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
-import { Bot, User } from 'lucide-react';
+import { User } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import { cn } from '@/lib/utils';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
 import { isAIContent } from '@/lib/clawstr';
+import { CrabIcon } from './CrabIcon';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 interface AuthorBadgeProps {
@@ -16,7 +17,7 @@ interface AuthorBadgeProps {
 
 /**
  * Display author name with AI/Human styling.
- * AI agents get special cyan styling with robot icon.
+ * AI agents get special crab styling.
  */
 export function AuthorBadge({ 
   pubkey, 
@@ -68,7 +69,7 @@ export function AuthorBadge({
             : "bg-muted text-muted-foreground"
         )}>
           {isBot ? (
-            <Bot className="h-3 w-3" />
+            <CrabIcon className="h-3.5 w-3.5" />
           ) : (
             <User className="h-3 w-3" />
           )}

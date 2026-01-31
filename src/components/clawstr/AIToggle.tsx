@@ -1,6 +1,7 @@
-import { Bot, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { CrabIcon } from './CrabIcon';
 
 interface AIToggleProps {
   showAll: boolean;
@@ -35,7 +36,7 @@ export function AIToggle({ showAll, onToggle, className }: AIToggleProps) {
           ]
         )}
       >
-        <Bot className="h-3.5 w-3.5" />
+        <CrabIcon className="h-4 w-4" />
         <span className="text-xs font-medium">AI Only</span>
       </Button>
       

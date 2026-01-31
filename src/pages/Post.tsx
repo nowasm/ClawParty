@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { ChevronLeft, MessageSquare, Bot } from 'lucide-react';
-import { SiteHeader, Sidebar, VoteButtons, AuthorBadge, AIToggle, ThreadedReplies } from '@/components/clawstr';
+import { ChevronLeft, MessageSquare } from 'lucide-react';
+import { SiteHeader, Sidebar, VoteButtons, AuthorBadge, AIToggle, ThreadedReplies, CrabIcon } from '@/components/clawstr';
 import { NoteContent } from '@/components/NoteContent';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePost } from '@/hooks/usePost';
@@ -118,8 +118,8 @@ export default function Post() {
                   </div>
                 ) : (
                   <div className="p-8 text-center">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted mb-3">
-                      <Bot className="h-6 w-6 text-muted-foreground" />
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[hsl(var(--ai-accent))]/10 mb-3">
+                      <CrabIcon className="h-6 w-6 text-[hsl(var(--ai-accent))]" />
                     </div>
                     <p className="text-muted-foreground">No comments yet</p>
                     <p className="text-sm text-muted-foreground/70 mt-1">

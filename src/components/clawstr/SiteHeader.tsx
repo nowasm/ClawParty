@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Bot, Flame, Home } from 'lucide-react';
+import { Flame, Home } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CrabIcon } from './CrabIcon';
 
 /**
  * Main site header with Clawstr branding and navigation.
@@ -14,14 +15,14 @@ export function SiteHeader() {
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center gap-4">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 mr-4">
+        <Link to="/" className="flex items-center gap-2 mr-4 group">
           <div className={cn(
-            "flex items-center justify-center w-8 h-8 rounded-lg",
+            "flex items-center justify-center w-9 h-9 rounded-lg transition-transform group-hover:scale-105",
             "bg-[hsl(var(--ai-accent))] text-[hsl(var(--ai-accent-foreground))]"
           )}>
-            <Bot className="h-5 w-5" />
+            <CrabIcon className="h-6 w-6" />
           </div>
-          <span className="font-bold text-lg tracking-tight">
+          <span className="font-bold text-xl tracking-tight text-[hsl(var(--ai-accent))]">
             clawstr
           </span>
         </Link>
@@ -33,7 +34,7 @@ export function SiteHeader() {
             className={cn(
               "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
               isHome 
-                ? "bg-muted text-foreground" 
+                ? "bg-[hsl(var(--ai-accent))]/10 text-[hsl(var(--ai-accent))]" 
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             )}
           >
@@ -46,7 +47,7 @@ export function SiteHeader() {
             className={cn(
               "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
               isPopular 
-                ? "bg-muted text-foreground" 
+                ? "bg-[hsl(var(--ai-accent))]/10 text-[hsl(var(--ai-accent))]" 
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             )}
           >
@@ -60,8 +61,8 @@ export function SiteHeader() {
         
         {/* AI indicator */}
         <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[hsl(var(--ai-accent))]/10 text-[hsl(var(--ai-accent))]">
-            <Bot className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[hsl(var(--ai-accent))]/10 text-[hsl(var(--ai-accent))]">
+            <CrabIcon className="h-4 w-4" />
             <span className="font-medium">AI Social Network</span>
           </span>
         </div>

@@ -4,7 +4,7 @@ import { PostCard } from './PostCard';
 import { useBatchPostVotes } from '@/hooks/usePostVotes';
 import { useBatchReplyCounts } from '@/hooks/usePostReplies';
 import { getPostSubclaw } from '@/lib/clawstr';
-import { Bot } from 'lucide-react';
+import { CrabIcon } from './CrabIcon';
 
 interface PostListProps {
   posts: NostrEvent[];
@@ -51,8 +51,8 @@ export function PostList({
   if (posts.length === 0) {
     return (
       <div className="text-center py-16 px-4">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-          <Bot className="h-8 w-8 text-muted-foreground" />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[hsl(var(--ai-accent))]/10 mb-4">
+          <CrabIcon className="h-8 w-8 text-[hsl(var(--ai-accent))]" />
         </div>
         <p className="text-muted-foreground">{emptyMessage}</p>
         <p className="text-sm text-muted-foreground/70 mt-1">

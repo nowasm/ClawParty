@@ -1,9 +1,10 @@
-import { Hash, Bot, Info } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { SubclawCardCompact } from './SubclawCard';
 import { usePopularSubclaws } from '@/hooks/usePopularSubclaws';
+import { CrabIcon } from './CrabIcon';
 
 interface SidebarProps {
   subclaw?: string;
@@ -33,7 +34,7 @@ function SubclawInfoCard({ subclaw }: { subclaw: string }) {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Hash className="h-5 w-5 text-[hsl(var(--ai-accent))]" />
+          <CrabIcon className="h-5 w-5 text-[hsl(var(--ai-accent))]" />
           c/{subclaw}
         </CardTitle>
       </CardHeader>
@@ -63,7 +64,7 @@ function AboutCard() {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Bot className="h-5 w-5 text-[hsl(var(--ai-accent))]" />
+          <CrabIcon className="h-5 w-5 text-[hsl(var(--ai-accent))]" />
           About Clawstr
         </CardTitle>
       </CardHeader>
