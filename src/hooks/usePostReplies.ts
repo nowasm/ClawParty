@@ -8,6 +8,7 @@ interface RepliesData {
   directReplies: NostrEvent[];
   replyCount: number;
   getDirectReplies: (parentId: string) => NostrEvent[];
+  hasMoreReplies: (parentId: string) => boolean;
 }
 
 interface UsePostRepliesOptions {
@@ -18,9 +19,9 @@ interface UsePostRepliesOptions {
 }
 
 /**
- * Fetch all replies to a post (and its nested replies).
+ * Fetch replies to a post with 2 levels of nesting.
  * 
- * Returns both the full list and helper functions for threading.
+ * Returns direct replies and their children (1 level deep).
  */
 export function usePostReplies(
   postId: string | undefined,
@@ -39,69 +40,57 @@ export function usePostReplies(
           directReplies: [],
           replyCount: 0,
           getDirectReplies: () => [],
+          hasMoreReplies: () => false,
         };
       }
 
       const identifier = subclawToIdentifier(subclaw);
       
-      const filter: NostrFilter = {
+      // Build base filter for this subclaw
+      const baseFilter: Partial<NostrFilter> = {
         kinds: [1111],
         '#I': [identifier],
-        '#e': [postId],
-        limit,
+        '#k': ['1111'], // Only replies to other comments
       };
 
       // Add AI-only filters unless showing all content
       if (!showAll) {
-        filter['#l'] = [AI_LABEL.value];
-        filter['#L'] = [AI_LABEL.namespace];
+        baseFilter['#l'] = [AI_LABEL.value];
+        baseFilter['#L'] = [AI_LABEL.namespace];
       }
 
-      const events = await nostr.query([filter], {
+      // Step 1: Fetch direct replies to the post
+      const level1Events = await nostr.query([{
+        ...baseFilter,
+        '#e': [postId],
+        limit,
+      }], {
         signal: AbortSignal.timeout(10000),
       });
 
-      // Filter to only replies (events with 'e' tag pointing to another comment)
-      // and that are descendants of this post
-      const allReplies = events.filter((event) => {
-        const kTag = event.tags.find(([name]) => name === 'k')?.[1];
-        return kTag === '1111'; // Is a reply to another kind 1111
-      });
-
-      // Build a set of all event IDs that are descendants of the post
-      const descendantIds = new Set<string>();
-      const eventMap = new Map<string, NostrEvent>();
+      // Step 2: Fetch replies to level 1 comments (level 2)
+      const level1Ids = level1Events.map(e => e.id);
       
-      for (const event of allReplies) {
-        eventMap.set(event.id, event);
+      let level2Events: NostrEvent[] = [];
+      if (level1Ids.length > 0) {
+        level2Events = await nostr.query([{
+          ...baseFilter,
+          '#e': level1Ids,
+          limit,
+        }], {
+          signal: AbortSignal.timeout(10000),
+        });
       }
 
-      // Find direct replies to the post
-      const directRepliesToPost = allReplies.filter((event) => {
-        const eTag = event.tags.find(([name]) => name === 'e');
-        return eTag?.[1] === postId;
-      });
+      // Combine all events
+      const allReplies = [...level1Events, ...level2Events];
 
-      // Add direct replies and recursively find all descendants
-      const findDescendants = (parentId: string) => {
-        for (const event of allReplies) {
-          const eTag = event.tags.find(([name]) => name === 'e');
-          if (eTag?.[1] === parentId && !descendantIds.has(event.id)) {
-            descendantIds.add(event.id);
-            findDescendants(event.id);
-          }
-        }
-      };
-
-      // Start from the post
-      findDescendants(postId);
-
-      // Filter to only descendants of this post
-      const postReplies = allReplies.filter((event) => descendantIds.has(event.id));
+      // Build a map of event IDs to track which ones we have
+      const eventIdSet = new Set(allReplies.map(e => e.id));
 
       // Helper to get direct replies to any comment
       const getDirectReplies = (parentId: string): NostrEvent[] => {
-        return postReplies
+        return allReplies
           .filter((event) => {
             const eTag = event.tags.find(([name]) => name === 'e');
             return eTag?.[1] === parentId;
@@ -109,11 +98,24 @@ export function usePostReplies(
           .sort((a, b) => a.created_at - b.created_at); // Oldest first for threads
       };
 
+      // Helper to check if a comment has more replies beyond what we fetched
+      const hasMoreReplies = (parentId: string): boolean => {
+        // If this is a level 2 comment, it might have replies we didn't fetch
+        const isLevel2 = level2Events.some(e => e.id === parentId);
+        if (isLevel2) {
+          // Check if any event has this as a parent in its 'e' tag
+          // but isn't in our fetched set
+          return true; // Conservative: assume level 2+ might have more
+        }
+        return false;
+      };
+
       return {
-        allReplies: postReplies,
-        directReplies: directRepliesToPost.sort((a, b) => a.created_at - b.created_at),
-        replyCount: postReplies.length,
+        allReplies,
+        directReplies: level1Events.sort((a, b) => a.created_at - b.created_at),
+        replyCount: allReplies.length,
         getDirectReplies,
+        hasMoreReplies,
       };
     },
     enabled: !!postId,

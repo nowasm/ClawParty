@@ -1,4 +1,6 @@
 import type { NostrEvent } from '@nostrify/nostrify';
+import { Link } from 'react-router-dom';
+import { MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime, isAIContent } from '@/lib/clawstr';
 import { VoteButtons } from './VoteButtons';
@@ -11,9 +13,11 @@ interface ThreadedReplyProps {
   depth?: number;
   children?: React.ReactNode;
   className?: string;
+  subclaw?: string;
+  hasMoreReplies?: boolean;
 }
 
-const MAX_DEPTH = 6;
+const MAX_DEPTH = 1; // Show only 1 level deep
 
 /**
  * A single reply in a threaded comment tree.
@@ -24,9 +28,12 @@ export function ThreadedReply({
   depth = 0,
   children,
   className,
+  subclaw,
+  hasMoreReplies = false,
 }: ThreadedReplyProps) {
   const isAI = isAIContent(reply);
   const isDeep = depth >= MAX_DEPTH;
+  const showViewMore = (isDeep && hasMoreReplies) || (depth === MAX_DEPTH - 1 && hasMoreReplies);
 
   return (
     <div className={cn("relative", className)}>
@@ -75,11 +82,15 @@ export function ThreadedReply({
             </div>
           )}
 
-          {/* Collapse indicator for deep threads */}
-          {children && isDeep && (
-            <div className="mt-2 text-xs text-muted-foreground">
-              Continue thread...
-            </div>
+          {/* "View full thread" link for deep threads */}
+          {showViewMore && subclaw && (
+            <Link
+              to={`/c/${subclaw}/comment/${reply.id}`}
+              className="mt-2 inline-flex items-center gap-1.5 text-xs text-[hsl(var(--ai-accent))] hover:underline"
+            >
+              <MessageSquare className="h-3 w-3" />
+              View full thread
+            </Link>
           )}
         </div>
       </div>
@@ -92,6 +103,7 @@ interface ThreadedRepliesProps {
   getDirectReplies: (parentId: string) => NostrEvent[];
   votesMap?: Map<string, { score: number }>;
   depth?: number;
+  subclaw?: string;
 }
 
 /**
@@ -102,6 +114,7 @@ export function ThreadedReplies({
   getDirectReplies,
   votesMap,
   depth = 0,
+  subclaw,
 }: ThreadedRepliesProps) {
   if (depth > MAX_DEPTH || replies.length === 0) {
     return null;
@@ -111,6 +124,7 @@ export function ThreadedReplies({
     <div className="space-y-0">
       {replies.map((reply) => {
         const childReplies = getDirectReplies(reply.id);
+        const hasMoreReplies = childReplies.length > 0;
         
         return (
           <ThreadedReply
@@ -118,13 +132,16 @@ export function ThreadedReplies({
             reply={reply}
             score={votesMap?.get(reply.id)?.score ?? 0}
             depth={depth}
+            subclaw={subclaw}
+            hasMoreReplies={hasMoreReplies}
           >
-            {childReplies.length > 0 && (
+            {childReplies.length > 0 && depth < MAX_DEPTH && (
               <ThreadedReplies
                 replies={childReplies}
                 getDirectReplies={getDirectReplies}
                 votesMap={votesMap}
                 depth={depth + 1}
+                subclaw={subclaw}
               />
             )}
           </ThreadedReply>
