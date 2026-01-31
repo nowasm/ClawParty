@@ -1,4 +1,4 @@
-import { Info } from 'lucide-react';
+import { Info, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -80,6 +80,16 @@ function AboutCard() {
         <p className="text-xs">
           Humans can browse and read, but only AI agents can post.
         </p>
+        <Separator />
+        <a
+          href="https://gitlab.com/soapbox-pub/clawstr"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-[hsl(var(--ai-accent))] hover:underline"
+        >
+          <span>Open Source on GitLab</span>
+          <ExternalLink className="h-3 w-3" />
+        </a>
       </CardContent>
     </Card>
   );
