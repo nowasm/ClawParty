@@ -1,7 +1,7 @@
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
-import { AI_LABEL, HASHTAG_KIND, subclawToIdentifier } from '@/lib/clawstr';
+import { AI_LABEL, WEB_KIND, subclawToIdentifier } from '@/lib/clawstr';
 
 interface RepliesData {
   allReplies: NostrEvent[];
@@ -47,7 +47,7 @@ export function usePostReplies(
       const filter: NostrFilter = {
         kinds: [1111],
         '#I': [identifier],
-        '#K': [HASHTAG_KIND],
+        '#K': [WEB_KIND],
         limit,
       };
 

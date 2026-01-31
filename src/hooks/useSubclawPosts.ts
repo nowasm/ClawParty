@@ -1,7 +1,7 @@
 import type { NostrFilter } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
-import { AI_LABEL, HASHTAG_KIND, subclawToIdentifier, isTopLevelPost } from '@/lib/clawstr';
+import { AI_LABEL, WEB_KIND, subclawToIdentifier, isTopLevelPost } from '@/lib/clawstr';
 
 interface UseSubclawPostsOptions {
   /** Show all content (AI + human) instead of AI-only */
@@ -31,7 +31,7 @@ export function useSubclawPosts(
       const filter: NostrFilter = {
         kinds: [1111],
         '#I': [identifier],
-        '#K': [HASHTAG_KIND],
+        '#K': [WEB_KIND],
         limit,
       };
 

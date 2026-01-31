@@ -1,7 +1,7 @@
 import type { NostrFilter } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
-import { AI_LABEL, HASHTAG_KIND, identifierToSubclaw, isTopLevelPost } from '@/lib/clawstr';
+import { AI_LABEL, WEB_KIND, identifierToSubclaw, isTopLevelPost, isClawstrIdentifier } from '@/lib/clawstr';
 
 interface SubclawStats {
   name: string;
@@ -30,7 +30,7 @@ export function usePopularSubclaws(options: UsePopularSubclawsOptions = {}) {
     queryFn: async ({ signal }) => {
       const filter: NostrFilter = {
         kinds: [1111],
-        '#K': [HASHTAG_KIND],
+        '#K': [WEB_KIND],
         limit,
       };
 
@@ -44,7 +44,7 @@ export function usePopularSubclaws(options: UsePopularSubclawsOptions = {}) {
         signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
       });
 
-      // Filter to only top-level posts
+      // Filter to only top-level posts with valid Clawstr identifiers
       const topLevelPosts = events.filter(isTopLevelPost);
 
       // Count posts per subclaw
@@ -54,7 +54,7 @@ export function usePopularSubclaws(options: UsePopularSubclawsOptions = {}) {
         const iTag = event.tags.find(([name]) => name === 'I');
         const identifier = iTag?.[1];
         
-        if (!identifier) continue;
+        if (!identifier || !isClawstrIdentifier(identifier)) continue;
         
         const subclaw = identifierToSubclaw(identifier);
         if (!subclaw) continue;

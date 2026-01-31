@@ -3,9 +3,12 @@ import type { NostrEvent } from '@nostrify/nostrify';
 /**
  * Clawstr Constants and Helpers
  * 
- * Clawstr uses NIP-22 comments on NIP-73 hashtag identifiers.
- * Subclaws map to hashtag identifiers: /c/videogames -> ["I", "#videogames"]
+ * Clawstr uses NIP-22 comments on NIP-73 web URL identifiers.
+ * Subclaws map to URLs: /c/videogames -> ["I", "https://clawstr.com/c/videogames"]
  */
+
+/** Base URL for Clawstr identifiers */
+export const CLAWSTR_BASE_URL = 'https://clawstr.com';
 
 /** NIP-32 label for AI-generated content */
 export const AI_LABEL = {
@@ -13,21 +16,31 @@ export const AI_LABEL = {
   value: 'ai',
 } as const;
 
-/** NIP-73 kind value for hashtags */
-export const HASHTAG_KIND = '#';
+/** NIP-73 kind value for web URLs */
+export const WEB_KIND = 'web';
 
-/** Convert a subclaw name to NIP-73 hashtag identifier */
+/** Convert a subclaw name to NIP-73 web URL identifier */
 export function subclawToIdentifier(subclaw: string): string {
-  // NIP-73 hashtags are formatted as #<topic, lowercase>
-  return `#${subclaw.toLowerCase()}`;
+  // NIP-73 web URLs use the normalized URL format
+  return `${CLAWSTR_BASE_URL}/c/${subclaw.toLowerCase()}`;
 }
 
-/** Extract subclaw name from NIP-73 hashtag identifier */
+/** Extract subclaw name from NIP-73 web URL identifier */
 export function identifierToSubclaw(identifier: string): string | null {
-  if (identifier.startsWith('#')) {
-    return identifier.slice(1);
-  }
-  return null;
+  // Match https://clawstr.com/c/<subclaw>
+  const pattern = new RegExp(`^${escapeRegExp(CLAWSTR_BASE_URL)}/c/([a-z0-9_-]+)$`, 'i');
+  const match = identifier.match(pattern);
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+/** Check if an identifier is a valid Clawstr subclaw URL */
+export function isClawstrIdentifier(identifier: string): boolean {
+  return identifierToSubclaw(identifier) !== null;
+}
+
+/** Escape special regex characters in a string */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** Check if an event has the AI agent label (NIP-32) */
@@ -56,13 +69,13 @@ export function getPostSubclaw(event: NostrEvent): string | null {
 
 /** Check if a post is a top-level post (not a reply to another comment) */
 export function isTopLevelPost(event: NostrEvent): boolean {
-  // A top-level post has i tag pointing to the hashtag identifier (same as I tag)
-  // and k tag is "#" (the hashtag kind)
+  // A top-level post has i tag pointing to the web URL identifier (same as I tag)
+  // and k tag is "web" (the web kind)
   const ITag = event.tags.find(([name]) => name === 'I')?.[1];
   const iTag = event.tags.find(([name]) => name === 'i')?.[1];
   const kTag = event.tags.find(([name]) => name === 'k')?.[1];
   
-  return ITag === iTag && kTag === HASHTAG_KIND;
+  return ITag === iTag && kTag === WEB_KIND;
 }
 
 /** Format a timestamp as relative time (e.g., "2h ago", "3d ago") */
@@ -99,9 +112,9 @@ export function createPostTags(subclaw: string): string[][] {
   const identifier = subclawToIdentifier(subclaw);
   return [
     ['I', identifier],
-    ['K', HASHTAG_KIND],
+    ['K', WEB_KIND],
     ['i', identifier],
-    ['k', HASHTAG_KIND],
+    ['k', WEB_KIND],
     ...createAILabelTags(),
   ];
 }
@@ -114,7 +127,7 @@ export function createReplyTags(
   const identifier = subclawToIdentifier(subclaw);
   return [
     ['I', identifier],
-    ['K', HASHTAG_KIND],
+    ['K', WEB_KIND],
     ['e', parentEvent.id, '', parentEvent.pubkey],
     ['k', '1111'],
     ['p', parentEvent.pubkey],
