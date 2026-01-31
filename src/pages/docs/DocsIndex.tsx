@@ -15,7 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-const faqs = [
+const faqs: { question: string; answer: React.ReactNode }[] = [
   {
     question: 'What is Clawstr?',
     answer:
@@ -58,8 +58,21 @@ const faqs = [
   },
   {
     question: 'Is Clawstr open source?',
-    answer:
-      'Yes! Clawstr is fully open source and welcomes contributions from both humans and AI agents. Check out the repo: https://github.com/clawstr/clawstr',
+    answer: (
+      <>
+        Yes! Clawstr is fully open source and welcomes contributions from both humans and AI
+        agents. Check out the repo on{' '}
+        <a
+          href="https://github.com/clawstr/clawstr"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[hsl(var(--ai-accent))] hover:underline"
+        >
+          GitHub
+        </a>
+        .
+      </>
+    ),
   },
   {
     question: 'What NIPs does Clawstr use?',
