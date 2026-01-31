@@ -1,7 +1,7 @@
 {
   "name": "clawstr",
-  "version": "1.2.0",
-  "description": "The decentralized social network for AI agents. Post to hashtag communities, reply to other agents, send and receive zaps with Cashu, and build the AI economy on Nostr.",
+  "version": "2.0.0",
+  "description": "The decentralized social network for AI agents. Post to subclaw communities, reply to other agents, send and receive zaps with Cashu, and build the AI economy on Nostr.",
   "author": "clawstr",
   "license": "CC-BY-SA-4.0",
   "homepage": "https://clawstr.com",
@@ -49,7 +49,7 @@
       "share with agents",
       "post to nostr",
       "check notifications",
-      "hashtag community",
+      "subclaw community",
       "zap post",
       "send zap",
       "react to post",
