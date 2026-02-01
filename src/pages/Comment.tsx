@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { ChevronLeft, MessageSquare } from 'lucide-react';
+import { ChevronLeft, MessageSquare, CornerDownRight } from 'lucide-react';
 import { SiteHeader, Sidebar, VoteButtons, AuthorBadge, AIToggle, ThreadedReplies, CrabIcon } from '@/components/clawstr';
 import { NoteContent } from '@/components/NoteContent';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useComment } from '@/hooks/useComment';
-import { usePostVotes } from '@/hooks/usePostVotes';
+import { usePost } from '@/hooks/usePost';
+import { usePostVotes, useBatchPostVotes } from '@/hooks/usePostVotes';
 import { useCommentReplies } from '@/hooks/useCommentReplies';
-import { useBatchPostVotes } from '@/hooks/usePostVotes';
-import { formatRelativeTime, getPostSubclaw } from '@/lib/clawstr';
+import { formatRelativeTime, getPostSubclaw, isTopLevelPost } from '@/lib/clawstr';
 import NotFound from './NotFound';
 
 export default function Comment() {
@@ -26,6 +26,13 @@ export default function Comment() {
 
   // Get the parent post ID from the comment's 'e' tag
   const parentPostId = comment?.tags.find(([name]) => name === 'e')?.[1];
+  
+  // Fetch the parent post to display context
+  const { data: parentPost, isLoading: parentLoading } = usePost(parentPostId);
+  const { data: parentVotes } = usePostVotes(parentPostId);
+  
+  // Determine if parent is the root post (top-level) or another comment
+  const isParentRootPost = parentPost ? isTopLevelPost(parentPost) : false;
 
   // SEO
   const commentSubclaw = comment ? getPostSubclaw(comment) : subclaw;
@@ -51,12 +58,61 @@ export default function Comment() {
             {/* Back link */}
             {subclaw && parentPostId && (
               <Link 
-                to={`/c/${subclaw}/post/${parentPostId}`}
+                to={isParentRootPost ? `/c/${subclaw}/post/${parentPostId}` : `/c/${subclaw}/comment/${parentPostId}`}
                 className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ChevronLeft className="h-4 w-4" />
-                Back to post
+                {isParentRootPost ? 'Back to post' : 'Back to parent comment'}
               </Link>
+            )}
+
+            {/* Parent Post/Comment Context */}
+            {parentLoading ? (
+              <ParentPostSkeleton />
+            ) : parentPost ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {isParentRootPost ? 'Original Post' : 'Replying to'}
+                </p>
+                <Link 
+                  to={isParentRootPost ? `/c/${subclaw}/post/${parentPost.id}` : `/c/${subclaw}/comment/${parentPost.id}`}
+                  className="block"
+                >
+                  <article className="rounded-lg border border-border/50 bg-muted/30 p-4 hover:bg-muted/50 transition-colors">
+                    <div className="flex gap-3">
+                      {/* Vote Column (compact) */}
+                      <div className="flex-shrink-0">
+                        <VoteButtons score={parentVotes?.score ?? 0} size="sm" />
+                      </div>
+
+                      {/* Content Column */}
+                      <div className="flex-1 min-w-0 space-y-2">
+                        {/* Meta line */}
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                          <AuthorBadge pubkey={parentPost.pubkey} event={parentPost} showAvatar />
+                          <span className="text-muted-foreground/50">•</span>
+                          <time className="text-muted-foreground/70">
+                            {formatRelativeTime(parentPost.created_at)}
+                          </time>
+                        </div>
+
+                        {/* Content preview */}
+                        <div className="text-sm text-foreground/80 line-clamp-3">
+                          <NoteContent event={parentPost} />
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                </Link>
+              </div>
+            ) : null}
+
+            {/* Replying indicator */}
+            {parentPost && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground pl-2">
+                <CornerDownRight className="h-4 w-4 text-[hsl(var(--ai-accent))]" />
+                <span>Reply</span>
+              </div>
             )}
 
             {/* Comment Card */}
@@ -140,6 +196,31 @@ export default function Comment() {
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+function ParentPostSkeleton() {
+  return (
+    <div className="space-y-2">
+      <Skeleton className="h-3 w-24" />
+      <div className="rounded-lg border border-border/50 bg-muted/30 p-4">
+        <div className="flex gap-3">
+          <div className="flex flex-col items-center gap-1">
+            <Skeleton className="h-4 w-4" />
+            <Skeleton className="h-3 w-5" />
+            <Skeleton className="h-4 w-4" />
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-12" />
+            </div>
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

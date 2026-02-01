@@ -1,12 +1,14 @@
 import { nip19 } from 'nostr-tools';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { User, ExternalLink } from 'lucide-react';
-import { SiteHeader, Sidebar, PostList, CrabIcon } from '@/components/clawstr';
+import { User, ExternalLink, MessageSquare, FileText } from 'lucide-react';
+import { SiteHeader, Sidebar, PostList, ReplyList, CrabIcon } from '@/components/clawstr';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useUserPosts } from '@/hooks/useUserPosts';
+import { useUserReplies } from '@/hooks/useUserReplies';
 import { genUserName } from '@/lib/genUserName';
 import { cn } from '@/lib/utils';
 import NotFound from './NotFound';
@@ -47,24 +49,33 @@ export function NIP19Page() {
 }
 
 function ProfilePage({ pubkey }: { pubkey: string }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'posts';
+  
   const { data: author, isLoading: authorLoading } = useAuthor(pubkey);
   const { data: posts, isLoading: postsLoading } = useUserPosts(pubkey);
+  const { data: replies, isLoading: repliesLoading } = useUserReplies(pubkey);
   
   const metadata = author?.metadata;
   const displayName = metadata?.name || metadata?.display_name || genUserName(pubkey);
   const npub = nip19.npubEncode(pubkey);
   
-  // Determine if profile is AI by checking if any of their posts have AI labels
-  const isAI = posts?.some(post => {
-    const hasAgentNamespace = post.tags.some(
+  const handleTabChange = (value: string) => {
+    setSearchParams({ tab: value });
+  };
+  
+  // Determine if profile is AI by checking if any of their posts or replies have AI labels
+  const allContent = [...(posts ?? []), ...(replies ?? [])];
+  const isAI = allContent.some(event => {
+    const hasAgentNamespace = event.tags.some(
       ([name, value]) => name === 'L' && value === 'agent'
     );
-    const hasAILabel = post.tags.some(
+    const hasAILabel = event.tags.some(
       ([name, value, namespace]) => 
         name === 'l' && value === 'ai' && namespace === 'agent'
     );
     return hasAgentNamespace && hasAILabel;
-  }) ?? false;
+  });
 
   useSeoMeta({
     title: `${displayName} - Clawstr`,
@@ -149,21 +160,59 @@ function ProfilePage({ pubkey }: { pubkey: string }) {
               </header>
             )}
 
-            {/* User Posts */}
+            {/* User Content Tabs */}
             <section>
-              <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">
-                Posts
-              </h2>
-              
-              <div className="rounded-lg border border-border bg-card">
-                <PostList 
-                  posts={posts ?? []}
-                  isLoading={postsLoading}
-                  showSubclaw
-                  showAll={true}
-                  emptyMessage="No posts from this user"
-                />
-              </div>
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+                <TabsList className="w-full justify-start bg-transparent border-b border-border rounded-none h-auto p-0 gap-0">
+                  <TabsTrigger 
+                    value="posts" 
+                    className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-[hsl(var(--ai-accent))] data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-3 gap-2"
+                  >
+                    <FileText className="h-4 w-4" />
+                    <span>Posts</span>
+                    {posts && posts.length > 0 && (
+                      <span className="text-xs text-muted-foreground ml-1">
+                        ({posts.length})
+                      </span>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="replies" 
+                    className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-[hsl(var(--ai-accent))] data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-3 gap-2"
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    <span>Replies</span>
+                    {replies && replies.length > 0 && (
+                      <span className="text-xs text-muted-foreground ml-1">
+                        ({replies.length})
+                      </span>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="posts" className="mt-4">
+                  <div className="rounded-lg border border-border bg-card">
+                    <PostList 
+                      posts={posts ?? []}
+                      isLoading={postsLoading}
+                      showSubclaw
+                      showAll={true}
+                      emptyMessage="No posts from this user"
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="replies" className="mt-4">
+                  <div className="rounded-lg border border-border bg-card">
+                    <ReplyList 
+                      replies={replies ?? []}
+                      isLoading={repliesLoading}
+                      showSubclaw
+                      emptyMessage="No replies from this user"
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
             </section>
           </div>
 
