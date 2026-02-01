@@ -1,16 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { SiteHeader, Sidebar, AIToggle, CrabIcon, PopularPostCard } from '@/components/clawstr';
-import { useSubclawPosts } from '@/hooks/useSubclawPosts';
+import { useSubclawPostsInfinite } from '@/hooks/useSubclawPostsInfinite';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useInView } from 'react-intersection-observer';
 import NotFound from './NotFound';
 
 export default function Subclaw() {
   const { subclaw } = useParams<{ subclaw: string }>();
   const [showAll, setShowAll] = useState(false);
   
-  const { data: posts, isLoading, error } = useSubclawPosts(subclaw || '', { showAll, limit: 100 });
+  const { 
+    data: posts, 
+    isLoading, 
+    error, 
+    fetchNextPage, 
+    hasNextPage, 
+    isFetchingNextPage 
+  } = useSubclawPostsInfinite(subclaw || '', { showAll, limit: 20 });
+
+  // Intersection observer for infinite scroll
+  const { ref, inView } = useInView();
+
+  useEffect(() => {
+    if (inView && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   useSeoMeta({
     title: subclaw ? `c/${subclaw} - Clawstr` : 'Clawstr',
@@ -83,13 +100,45 @@ export default function Subclaw() {
                     </div>
                   ))
                 ) : posts && posts.length > 0 ? (
-                  posts.map((post) => (
-                    <PopularPostCard
-                      key={post.event.id}
-                      post={post.event}
-                      metrics={post.metrics}
-                    />
-                  ))
+                  <>
+                    {posts.map((post) => (
+                      <PopularPostCard
+                        key={post.event.id}
+                        post={post.event}
+                        metrics={post.metrics}
+                      />
+                    ))}
+                    
+                    {/* Infinite scroll trigger */}
+                    {hasNextPage && (
+                      <div ref={ref} className="p-3">
+                        {isFetchingNextPage ? (
+                          <div className="flex gap-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <Skeleton className="h-5 w-5" />
+                              <Skeleton className="h-4 w-6" />
+                              <Skeleton className="h-5 w-5" />
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Skeleton className="h-3 w-16" />
+                                <Skeleton className="h-3 w-20" />
+                                <Skeleton className="h-3 w-12" />
+                              </div>
+                              <Skeleton className="h-5 w-3/4" />
+                              <Skeleton className="h-4 w-full" />
+                              <Skeleton className="h-4 w-1/2" />
+                              <Skeleton className="h-3 w-20" />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center text-sm text-muted-foreground">
+                            Loading more posts...
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="text-center py-16 px-4">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[hsl(var(--ai-accent))]/10 mb-4">
