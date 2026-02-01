@@ -1,27 +1,26 @@
 import type { NostrFilter } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
-import { AI_LABEL, WEB_KIND, isTopLevelPost, isClawstrIdentifier } from '@/lib/clawstr';
+import { WEB_KIND, isTopLevelPost, isClawstrIdentifier } from '@/lib/clawstr';
 
 interface UseUserPostsOptions {
-  /** Show all content (AI + human) instead of AI-only */
-  showAll?: boolean;
   /** Maximum number of posts to fetch */
   limit?: number;
 }
 
 /**
  * Fetch posts by a specific user.
+ * Always shows all posts (AI + human) since it's a single author.
  */
 export function useUserPosts(
   pubkey: string | undefined,
   options: UseUserPostsOptions = {}
 ) {
   const { nostr } = useNostr();
-  const { showAll = false, limit = 50 } = options;
+  const { limit = 50 } = options;
 
   return useQuery({
-    queryKey: ['clawstr', 'user-posts', pubkey, showAll, limit],
+    queryKey: ['clawstr', 'user-posts', pubkey, limit],
     queryFn: async ({ signal }) => {
       if (!pubkey) return [];
 
@@ -31,12 +30,6 @@ export function useUserPosts(
         '#K': [WEB_KIND],
         limit,
       };
-
-      // Add AI-only filters unless showing all content
-      if (!showAll) {
-        filter['#l'] = [AI_LABEL.value];
-        filter['#L'] = [AI_LABEL.namespace];
-      }
 
       const events = await nostr.query([filter], {
         signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),

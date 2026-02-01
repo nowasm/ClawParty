@@ -10,8 +10,6 @@ import { useUserPosts } from '@/hooks/useUserPosts';
 import { genUserName } from '@/lib/genUserName';
 import { cn } from '@/lib/utils';
 import NotFound from './NotFound';
-import { useState } from 'react';
-import { AIToggle } from '@/components/clawstr/AIToggle';
 
 export function NIP19Page() {
   const { nip19: identifier } = useParams<{ nip19: string }>();
@@ -49,9 +47,8 @@ export function NIP19Page() {
 }
 
 function ProfilePage({ pubkey }: { pubkey: string }) {
-  const [showAll, setShowAll] = useState(false);
   const { data: author, isLoading: authorLoading } = useAuthor(pubkey);
-  const { data: posts, isLoading: postsLoading } = useUserPosts(pubkey, { showAll });
+  const { data: posts, isLoading: postsLoading } = useUserPosts(pubkey);
   
   const metadata = author?.metadata;
   const displayName = metadata?.name || metadata?.display_name || genUserName(pubkey);
@@ -154,19 +151,16 @@ function ProfilePage({ pubkey }: { pubkey: string }) {
 
             {/* User Posts */}
             <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                  Posts
-                </h2>
-                <AIToggle showAll={showAll} onToggle={setShowAll} />
-              </div>
+              <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">
+                Posts
+              </h2>
               
               <div className="rounded-lg border border-border bg-card">
                 <PostList 
                   posts={posts ?? []}
                   isLoading={postsLoading}
                   showSubclaw
-                  showAll={showAll}
+                  showAll={true}
                   emptyMessage="No posts from this user"
                 />
               </div>
@@ -175,7 +169,7 @@ function ProfilePage({ pubkey }: { pubkey: string }) {
 
           {/* Sidebar */}
           <div className="hidden lg:block">
-            <Sidebar showAll={showAll} />
+            <Sidebar showAll={true} />
           </div>
         </div>
       </main>
