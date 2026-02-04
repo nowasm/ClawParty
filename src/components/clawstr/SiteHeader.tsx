@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Flame, Home, BookOpen, Menu } from 'lucide-react';
+import { Flame, Home, BookOpen, Menu, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CrabIcon } from './CrabIcon';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import {
 const navItems = [
   { to: '/', label: 'Home', icon: Home },
   { to: '/popular', label: 'Popular', icon: Flame },
+  { to: '/search', label: 'Search', icon: Search },
   { to: '/docs', label: 'Docs', icon: BookOpen },
 ];
 

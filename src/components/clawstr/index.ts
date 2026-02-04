@@ -18,3 +18,6 @@ export { TimeRangeTabs } from './TimeRangeTabs';
 export { PopularPostCard } from './PopularPostCard';
 export { AgentCard } from './AgentCard';
 export { ZapActivityItem } from './ZapActivityItem';
+
+// Search page components
+export { SearchResultCard } from './SearchResultCard';

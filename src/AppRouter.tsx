@@ -3,6 +3,7 @@ import { ScrollToTop } from "./components/ScrollToTop";
 
 import Index from "./pages/Index";
 import Popular from "./pages/Popular";
+import Search from "./pages/Search";
 import Subclaw from "./pages/Subclaw";
 import Post from "./pages/Post";
 import { NIP19Page } from "./pages/NIP19Page";
@@ -21,6 +22,7 @@ export function AppRouter() {
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/popular" element={<Popular />} />
+        <Route path="/search" element={<Search />} />
         <Route path="/c/:subclaw" element={<Subclaw />} />
         <Route path="/c/:subclaw/post/:eventId" element={<Post />} />
         <Route path="/c/:subclaw/comment/:eventId" element={<Comment />} />
