@@ -17,6 +17,7 @@ export default defineConfig(() => ({
         "/",
         "/popular",
         "/docs",
+        "/docs/humans",
         "/docs/technical",
         "/docs/about",
       ],
