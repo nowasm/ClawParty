@@ -13,10 +13,13 @@ import type { PeerState, PeerPosition } from '@/lib/webrtc';
 const TERRAIN_SIZE = 100; // 100m x 100m
 const MOVE_SPEED = 8; // meters per second
 const ROTATE_SPEED = 2.5; // radians per second
-const CAMERA_HEIGHT = 6;
-const CAMERA_DISTANCE = 10;
-const CAMERA_LERP = 0.08;
+const CAMERA_HEIGHT = 4;
+const CAMERA_DISTANCE = 12;
+const CAMERA_LERP = 0.1;
 const POSITION_BROADCAST_INTERVAL = 66; // ~15fps
+const MOUSE_SENSITIVITY = 0.002;
+const PITCH_MIN = -Math.PI / 6; // look down limit (~30deg)
+const PITCH_MAX = Math.PI / 3;  // look up limit (~60deg)
 
 // ============================================================================
 // Types
@@ -182,9 +185,10 @@ interface LocalPlayerProps {
 
 function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
   const keysRef = useRef<Set<string>>(new Set());
   const posRef = useRef({ x: 0, y: 0, z: 0, ry: 0 });
+  const pitchRef = useRef(0.3); // camera pitch (vertical angle)
   const lastBroadcast = useRef(0);
 
   const preset = avatar ? getAvatarPreset(avatar.model) : AVATAR_PRESETS[0];
@@ -209,12 +213,43 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     };
   }, []);
 
+  // Mouse look via Pointer Lock
+  useEffect(() => {
+    const canvas = gl.domElement;
+
+    const requestLock = () => {
+      canvas.requestPointerLock();
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (document.pointerLockElement !== canvas) return;
+      // Horizontal → yaw
+      posRef.current.ry -= e.movementX * MOUSE_SENSITIVITY;
+      // Vertical → pitch (clamped)
+      pitchRef.current = Math.max(
+        PITCH_MIN,
+        Math.min(PITCH_MAX, pitchRef.current - e.movementY * MOUSE_SENSITIVITY),
+      );
+    };
+
+    canvas.addEventListener('click', requestLock);
+    document.addEventListener('mousemove', onMouseMove);
+
+    return () => {
+      canvas.removeEventListener('click', requestLock);
+      document.removeEventListener('mousemove', onMouseMove);
+      if (document.pointerLockElement === canvas) {
+        document.exitPointerLock();
+      }
+    };
+  }, [gl]);
+
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     const keys = keysRef.current;
     const pos = posRef.current;
 
-    // Rotation
+    // Keyboard rotation (A/D still work as fallback)
     if (keys.has('a') || keys.has('arrowleft')) {
       pos.ry += ROTATE_SPEED * delta;
     }
@@ -230,6 +265,13 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     }
     if (keys.has('s') || keys.has('arrowdown')) {
       moveZ += 1;
+    }
+    // Strafe with Q/E
+    if (keys.has('q')) {
+      moveX -= 1;
+    }
+    if (keys.has('e')) {
+      moveX += 1;
     }
 
     if (moveX !== 0 || moveZ !== 0) {
@@ -248,15 +290,18 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     pos.x = Math.max(-half, Math.min(half, pos.x));
     pos.z = Math.max(-half, Math.min(half, pos.z));
 
-    // Apply to group
+    // Apply to group (character only rotates on Y)
     groupRef.current.position.set(pos.x, pos.y, pos.z);
     groupRef.current.rotation.y = pos.ry;
 
-    // Camera follow (third-person, behind the player)
+    // Camera follow (third-person, behind and above player, respecting pitch)
+    const pitch = pitchRef.current;
+    const camDist = CAMERA_DISTANCE * Math.cos(pitch);
+    const camHeight = CAMERA_HEIGHT + CAMERA_DISTANCE * Math.sin(pitch);
     const targetCamPos = new THREE.Vector3(
-      pos.x - Math.sin(pos.ry) * CAMERA_DISTANCE,
-      pos.y + CAMERA_HEIGHT,
-      pos.z + Math.cos(pos.ry) * CAMERA_DISTANCE,
+      pos.x - Math.sin(pos.ry) * camDist,
+      pos.y + camHeight,
+      pos.z + Math.cos(pos.ry) * camDist,
     );
     camera.position.lerp(targetCamPos, CAMERA_LERP);
     camera.lookAt(pos.x, pos.y + 1.5, pos.z);
@@ -467,9 +512,10 @@ export function SceneViewer({
         </Suspense>
       </Canvas>
 
-      {/* WASD hint overlay */}
-      <div className="absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/60 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none select-none">
-        <span className="font-mono">W A S D</span> to move
+      {/* Controls hint overlay */}
+      <div className="absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/70 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none select-none space-y-0.5">
+        <div><span className="font-mono">W A S D</span> move &middot; <span className="font-mono">Q E</span> strafe</div>
+        <div>Click to look &middot; <span className="font-mono">ESC</span> release</div>
       </div>
     </div>
   );
