@@ -13,6 +13,7 @@ import { NostrLoginProvider } from '@nostrify/react/login';
 import { AppProvider } from '@/components/AppProvider';
 import { NWCProvider } from '@/contexts/NWCContext';
 import { AppConfig } from '@/contexts/AppContext';
+import { DEFAULT_RELAY_URLS } from '@/lib/scene';
 import AppRouter from './AppRouter';
 
 const head = createHead({
@@ -34,12 +35,7 @@ const queryClient = new QueryClient({
 const defaultConfig: AppConfig = {
   theme: "system",
   relayMetadata: {
-    relays: [
-      { url: 'wss://relay.ditto.pub', read: true, write: true },
-      { url: 'wss://relay.primal.net', read: true, write: true },
-      { url: 'wss://relay.damus.io', read: true, write: true },
-      { url: 'wss://nos.lol', read: true, write: true },
-    ],
+    relays: DEFAULT_RELAY_URLS.map((url) => ({ url, read: true, write: true })),
     updatedAt: 0,
   },
 };

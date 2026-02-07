@@ -11,6 +11,18 @@ export const SCENE_D_TAG = 'my-world';
 /** Avatar d-tag identifier */
 export const AVATAR_D_TAG = '3d-scene-avatar';
 
+/**
+ * Default relay URLs that all clients use for discovery.
+ * Publishing always broadcasts to these relays so that
+ * anonymous / non-logged-in users can find the content.
+ */
+export const DEFAULT_RELAY_URLS = [
+  'wss://relay.ditto.pub',
+  'wss://relay.primal.net',
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+];
+
 /** Preset avatar definitions */
 export interface AvatarPreset {
   id: string;
