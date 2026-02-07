@@ -11,6 +11,25 @@ if (!globalThis.Buffer) {
 }
 
 /**
+ * Polyfill for crypto.randomUUID()
+ *
+ * crypto.randomUUID() is only available in secure contexts (HTTPS or localhost).
+ * When the app is accessed via HTTP on a LAN address (e.g. http://192.168.x.x),
+ * the browser does not provide this API. Nostrify's NRelay1 uses it internally
+ * to generate subscription IDs, so without this polyfill ALL Nostr queries fail.
+ *
+ * This polyfill uses crypto.getRandomValues() which IS available in non-secure contexts.
+ */
+if (typeof crypto !== 'undefined' && typeof crypto.randomUUID !== 'function') {
+  crypto.randomUUID = function randomUUID(): `${string}-${string}-${string}-${string}-${string}` {
+    return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => {
+      const n = Number(c);
+      return (n ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (n / 4)))).toString(16);
+    }) as `${string}-${string}-${string}-${string}-${string}`;
+  };
+}
+
+/**
  * Polyfill for AbortSignal.any()
  * 
  * AbortSignal.any() creates an AbortSignal that will be aborted when any of the
