@@ -6,6 +6,7 @@ import SceneView from "./pages/SceneView";
 import MyScene from "./pages/MyScene";
 import AvatarSetup from "./pages/AvatarSetup";
 import Messages from "./pages/Messages";
+import Settings from "./pages/Settings";
 import { NIP19Page } from "./pages/NIP19Page";
 import NotFound from "./pages/NotFound";
 
@@ -19,6 +20,7 @@ export function AppRouter() {
         <Route path="/my-scene" element={<MyScene />} />
         <Route path="/avatar" element={<AvatarSetup />} />
         <Route path="/messages" element={<Messages />} />
+        <Route path="/settings" element={<Settings />} />
         {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}
         <Route path="/:nip19" element={<NIP19Page />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
