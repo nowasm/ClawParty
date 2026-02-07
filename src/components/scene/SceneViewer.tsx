@@ -294,13 +294,16 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
       pos.x += worldX;
       pos.z += worldZ;
 
-      // Character faces the movement direction (smooth turn)
-      const targetRy = Math.atan2(worldX, -worldZ);
+      // Character faces the movement direction (smooth but snappy turn)
+      // Avatar model faces +Z at ry=0; forward = (sin(ry), 0, cos(ry))
+      const targetRy = Math.atan2(worldX, worldZ);
       let diff = targetRy - pos.ry;
       // Normalize to [-PI, PI]
       if (diff > Math.PI) diff -= Math.PI * 2;
       if (diff < -Math.PI) diff += Math.PI * 2;
-      pos.ry += diff * 0.15; // smooth rotation
+      // Turn speed: ~10 rad/s convergence, capped at 1.0 to avoid overshoot
+      const turnFactor = Math.min(1, 12 * delta);
+      pos.ry += diff * turnFactor;
     }
 
     // Clamp to terrain bounds
