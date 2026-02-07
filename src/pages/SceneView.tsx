@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { ArrowLeft, Users, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Users, Wifi, WifiOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -9,15 +9,17 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SceneViewer } from '@/components/scene/SceneViewer';
 import { SceneChat } from '@/components/scene/SceneChat';
+import { EmojiBar } from '@/components/scene/EmojiBar';
 import { SiteHeader } from '@/components/scene/SiteHeader';
 import { useScene } from '@/hooks/useScene';
 import { useAuthor } from '@/hooks/useAuthor';
-import { usePresence } from '@/hooks/usePresence';
 import { useAvatars } from '@/hooks/useAvatar';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAvatar } from '@/hooks/useAvatar';
+import { useWebRTC } from '@/hooks/useWebRTC';
 import NotFound from './NotFound';
-import { AVATAR_PRESETS } from '@/lib/scene';
+import { AVATAR_PRESETS, type AvatarConfig } from '@/lib/scene';
+import { useCallback, useMemo } from 'react';
 
 const SceneView = () => {
   const { npub } = useParams<{ npub: string }>();
@@ -38,40 +40,62 @@ const SceneView = () => {
     // Invalid npub
   }
 
+  // Scene data
   const { data: scene, isLoading: sceneLoading } = useScene(pubkey);
   const author = useAuthor(pubkey);
-  const { data: presentPubkeys = [] } = usePresence(pubkey, scene?.id);
-
-  // Include current user in the presence list for display
-  const allPresent = user && !presentPubkeys.includes(user.pubkey)
-    ? [user.pubkey, ...presentPubkeys]
-    : presentPubkeys;
-
-  const { data: avatarConfigs = {} } = useAvatars(allPresent);
   const { data: currentUserAvatar } = useAvatar(user?.pubkey);
 
-  // Build avatars map with defaults for users without avatar config
-  const avatarsMap = { ...avatarConfigs };
-  for (const pk of allPresent) {
-    if (!avatarsMap[pk]) {
-      const preset = AVATAR_PRESETS[Math.abs(pk.charCodeAt(0)) % AVATAR_PRESETS.length];
-      avatarsMap[pk] = {
-        model: preset.id,
-        color: preset.color,
+  // Determine the scene d-tag. If no scene is published, use a default "my-world" tag
+  const sceneDTag = scene?.id ?? 'my-world';
+  const scenePubkey = pubkey;
+
+  // WebRTC multi-player
+  const {
+    peerStates,
+    connectedCount,
+    broadcastPosition,
+    broadcastEmoji,
+    isActive: webrtcActive,
+  } = useWebRTC({
+    scenePubkey,
+    sceneDTag,
+    enabled: !!user && !!pubkey,
+  });
+
+  // Fetch avatar configs for all remote peers
+  const remotePubkeys = useMemo(() => Object.keys(peerStates), [peerStates]);
+  const { data: remoteAvatarConfigs = {} } = useAvatars(remotePubkeys);
+
+  // Build full remote avatars map (with fallbacks)
+  const remoteAvatars = useMemo(() => {
+    const map: Record<string, AvatarConfig> = {};
+    for (const pk of remotePubkeys) {
+      if (pk === user?.pubkey) continue;
+      map[pk] = remoteAvatarConfigs[pk] ?? {
+        model: AVATAR_PRESETS[Math.abs(pk.charCodeAt(0)) % AVATAR_PRESETS.length].id,
+        color: AVATAR_PRESETS[Math.abs(pk.charCodeAt(0)) % AVATAR_PRESETS.length].color,
         displayName: pk.slice(0, 8),
       };
     }
-  }
-  // Ensure current user's avatar is up-to-date
-  if (user && currentUserAvatar) {
-    avatarsMap[user.pubkey] = currentUserAvatar;
-  }
+    return map;
+  }, [remotePubkeys, remoteAvatarConfigs, user?.pubkey]);
+
+  const handleEmoji = useCallback((emoji: string) => {
+    broadcastEmoji(emoji);
+  }, [broadcastEmoji]);
 
   const metadata = author.data?.metadata;
   const displayName = metadata?.name || pubkey?.slice(0, 8) || 'Unknown';
 
+  // Total people in scene: current user + WebRTC peers
+  const totalPresent = (user ? 1 : 0) + connectedCount;
+
   useSeoMeta({
-    title: scene?.title ? `${scene.title} - 3D Scene Share` : '3D Scene Share',
+    title: scene?.title
+      ? `${scene.title} - 3D Scene Share`
+      : pubkey
+        ? `${displayName}'s World - 3D Scene Share`
+        : '3D Scene Share',
     description: scene?.summary || 'Explore this 3D scene',
   });
 
@@ -80,100 +104,91 @@ const SceneView = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <SiteHeader />
 
-      <div className="container py-4">
-        {/* Back button & scene info */}
-        <div className="flex items-center gap-4 mb-4">
+      {/* Top bar: scene info */}
+      <div className="border-b border-border bg-card/50 backdrop-blur-sm">
+        <div className="container flex items-center gap-4 h-12 px-4">
           <Link to="/">
-            <Button variant="ghost" size="sm" className="gap-2">
+            <Button variant="ghost" size="sm" className="gap-2 h-8">
               <ArrowLeft className="h-4 w-4" />
-              Back
+              <span className="hidden sm:inline">Back</span>
             </Button>
           </Link>
 
           {sceneLoading ? (
             <div className="flex items-center gap-3">
-              <Skeleton className="h-8 w-8 rounded-full" />
-              <div className="space-y-1">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-20" />
-              </div>
+              <Skeleton className="h-6 w-6 rounded-full" />
+              <Skeleton className="h-4 w-32" />
             </div>
-          ) : scene ? (
+          ) : (
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <Avatar className="h-8 w-8">
+              <Avatar className="h-6 w-6">
                 {metadata?.picture && <AvatarImage src={metadata.picture} />}
-                <AvatarFallback className="text-xs">
+                <AvatarFallback className="text-[10px]">
                   {displayName.slice(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0">
-                <h1 className="font-semibold text-sm truncate">{scene.title}</h1>
-                <p className="text-xs text-muted-foreground truncate">by {displayName}</p>
+                <h1 className="font-semibold text-sm truncate">
+                  {scene?.title || `${displayName}'s World`}
+                </h1>
               </div>
-              <Badge variant="outline" className="ml-2 gap-1 shrink-0">
-                <Users className="h-3 w-3" />
-                {allPresent.length}
-              </Badge>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">This user hasn&apos;t published a scene yet.</p>
           )}
-        </div>
 
-        {/* Main content */}
-        {sceneLoading ? (
-          <Skeleton className="w-full aspect-[16/9] rounded-xl" />
-        ) : scene ? (
-          <div className="relative">
-            {/* 3D Scene */}
-            <SceneViewer
-              sceneUrl={scene.sceneUrl}
-              avatars={avatarsMap}
-              currentUserPubkey={user?.pubkey}
-              className="w-full aspect-[16/9]"
-            />
-
-            {/* Chat overlay */}
-            <div className="absolute bottom-4 right-4 w-80 max-h-[60%] z-10">
-              <SceneChat
-                scenePubkey={scene.pubkey}
-                sceneDTag={scene.id}
-              />
-            </div>
-
-            {/* Scene description */}
-            {scene.summary && (
-              <div className="mt-4 p-4 rounded-lg border border-border bg-card">
-                <p className="text-sm text-muted-foreground">{scene.summary}</p>
-              </div>
-            )}
-
-            {/* Download link */}
-            {scene.sceneUrl && (
-              <div className="mt-3 flex items-center gap-2">
-                <a
-                  href={scene.sceneUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Download scene file
-                </a>
-              </div>
+          {/* Status badges */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Badge variant="outline" className="gap-1 h-7 text-xs">
+              <Users className="h-3 w-3" />
+              {totalPresent}
+            </Badge>
+            {user && (
+              <Badge
+                variant={webrtcActive ? 'default' : 'secondary'}
+                className="gap-1 h-7 text-xs"
+              >
+                {webrtcActive ? (
+                  <Wifi className="h-3 w-3" />
+                ) : (
+                  <WifiOff className="h-3 w-3" />
+                )}
+                {webrtcActive ? `P2P (${connectedCount})` : 'Offline'}
+              </Badge>
             )}
           </div>
-        ) : (
-          <div className="flex items-center justify-center h-[50vh]">
-            <div className="text-center space-y-3">
-              <p className="text-muted-foreground">No scene found for this user.</p>
-              <Link to="/">
-                <Button variant="outline">Browse Scenes</Button>
-              </Link>
+        </div>
+      </div>
+
+      {/* Main 3D viewport */}
+      <div className="flex-1 relative">
+        <SceneViewer
+          sceneUrl={scene?.sceneUrl}
+          myAvatar={currentUserAvatar ?? undefined}
+          currentUserPubkey={user?.pubkey}
+          remoteAvatars={remoteAvatars}
+          peerStates={peerStates}
+          onPositionUpdate={broadcastPosition}
+          className="w-full h-full min-h-[60vh] rounded-none border-0"
+        />
+
+        {/* Emoji bar (bottom center) */}
+        {user && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+            <div className="bg-card/90 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 shadow-lg">
+              <EmojiBar onEmoji={handleEmoji} />
             </div>
+          </div>
+        )}
+
+        {/* Chat panel (right side) */}
+        {pubkey && (
+          <div className="absolute top-4 right-4 w-80 max-h-[70%] z-10">
+            <SceneChat
+              scenePubkey={pubkey}
+              sceneDTag={sceneDTag}
+            />
           </div>
         )}
       </div>

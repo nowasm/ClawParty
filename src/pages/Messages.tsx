@@ -1,21 +1,21 @@
 import { useSeoMeta } from '@unhead/react';
 import { DMMessagingInterface } from '@/components/dm/DMMessagingInterface';
+import { DMProvider } from '@/components/DMProvider';
+import { SiteHeader } from '@/components/scene/SiteHeader';
 
 const Messages = () => {
   useSeoMeta({
-    title: 'Messages',
+    title: 'Messages - 3D Scene Share',
     description: 'Private encrypted messaging on Nostr',
   });
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-4 h-screen flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-semibold">Messages</h1>
-        </div>
-
-        <DMMessagingInterface className="flex-1" />
+      <SiteHeader />
+      <div className="container mx-auto p-4 h-[calc(100vh-3.5rem)] flex flex-col">
+        <DMProvider>
+          <DMMessagingInterface className="flex-1" />
+        </DMProvider>
       </div>
     </div>
   );

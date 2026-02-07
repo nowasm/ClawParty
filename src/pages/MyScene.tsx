@@ -93,7 +93,7 @@ const MyScene = () => {
               <div className="aspect-video">
                 <SceneViewer
                   sceneUrl={scene.sceneUrl}
-                  avatars={avatar ? { [user.pubkey]: avatar } : {}}
+                  myAvatar={avatar ?? undefined}
                   currentUserPubkey={user.pubkey}
                 />
               </div>
