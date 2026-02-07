@@ -43,6 +43,8 @@ interface AvatarModelProps {
   animate?: boolean;
   /** Active emoji triggers action animation + expression change */
   emoji?: string | null;
+  /** Movement state: idle = idle anim, walk = walk cycle, run = run cycle */
+  moveState?: 'idle' | 'walk' | 'run';
 }
 
 // ======================================================================
@@ -418,6 +420,7 @@ export function AvatarModel({
   isCurrentUser = false,
   animate = true,
   emoji,
+  moveState = 'idle',
 }: AvatarModelProps) {
   const groupRef = useRef<THREE.Group>(null!);
   const headRef = useRef<THREE.Group>(null!);
@@ -484,6 +487,54 @@ export function AvatarModel({
     if (headRef.current) {
       headRef.current.rotation.z = Math.sin(t * 0.8) * 0.03;
       headRef.current.rotation.x = 0;
+    }
+  }
+
+  // Walk animation (moderate cycle speed, moderate arm/leg swing)
+  function applyWalk(t: number) {
+    const cycle = t * 9;
+    const legSwing = Math.sin(cycle) * 0.35;
+    const armSwing = Math.sin(cycle) * 0.4;
+    if (groupRef.current) {
+      groupRef.current.position.y = Math.abs(Math.sin(cycle)) * 0.03;
+    }
+    if (leftLegRef.current) leftLegRef.current.rotation.x = -legSwing;
+    if (rightLegRef.current) rightLegRef.current.rotation.x = legSwing;
+    if (leftArmRef.current) {
+      leftArmRef.current.rotation.x = -armSwing;
+      leftArmRef.current.rotation.z = 0.05;
+    }
+    if (rightArmRef.current) {
+      rightArmRef.current.rotation.x = armSwing;
+      rightArmRef.current.rotation.z = -0.05;
+    }
+    if (headRef.current) {
+      headRef.current.rotation.x = 0;
+      headRef.current.rotation.z = Math.sin(t * 0.6) * 0.02;
+    }
+  }
+
+  // Run animation (faster cycle, larger arm/leg swing, body lean)
+  function applyRun(t: number) {
+    const cycle = t * 11;
+    const legSwing = Math.sin(cycle) * 0.55;
+    const armSwing = Math.sin(cycle) * 0.7;
+    if (groupRef.current) {
+      groupRef.current.position.y = Math.abs(Math.sin(cycle)) * 0.06;
+    }
+    if (leftLegRef.current) leftLegRef.current.rotation.x = -legSwing;
+    if (rightLegRef.current) rightLegRef.current.rotation.x = legSwing;
+    if (leftArmRef.current) {
+      leftArmRef.current.rotation.x = -armSwing;
+      leftArmRef.current.rotation.z = 0.12;
+    }
+    if (rightArmRef.current) {
+      rightArmRef.current.rotation.x = armSwing;
+      rightArmRef.current.rotation.z = -0.12;
+    }
+    if (headRef.current) {
+      headRef.current.rotation.x = 0.08;
+      headRef.current.rotation.z = Math.sin(t * 1.2) * 0.03;
     }
   }
 
@@ -646,7 +697,7 @@ export function AvatarModel({
       pendingEmoji.current = null;
     }
 
-    // Action animation
+    // Action animation (emoji) takes priority
     if (currentAction.current) {
       const elapsed = t - animStart.current;
       if (elapsed >= ACTION_DURATION) {
@@ -659,8 +710,14 @@ export function AvatarModel({
       }
     }
 
-    // Idle animation
-    applyIdle(t);
+    // Movement: walk or run based on speed
+    if (moveState === 'run') {
+      applyRun(t);
+    } else if (moveState === 'walk') {
+      applyWalk(t);
+    } else {
+      applyIdle(t);
+    }
   });
 
   return (

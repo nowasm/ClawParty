@@ -11,7 +11,10 @@ import type { PeerState, PeerPosition } from '@/lib/webrtc';
 // ============================================================================
 
 const TERRAIN_SIZE = 100; // 100m x 100m
-const MOVE_SPEED = 8; // meters per second
+const WALK_SPEED = 4; // meters per second
+const RUN_SPEED = 8; // meters per second (when holding Shift)
+const JUMP_VELOCITY = 6; // meters per second (initial upward speed)
+const GRAVITY = -18; // meters per second squared
 const _ROTATE_SPEED = 2.5; // radians per second (reserved for future use)
 const CAMERA_HEIGHT = 4;
 const CAMERA_DISTANCE = 12;
@@ -196,8 +199,15 @@ interface LocalPlayerProps {
   emoji?: string | null;
 }
 
-const BUBBLE_OFFSET_Y = 0.5;
-const BUBBLE_MAX_WIDTH = 140;
+/** Vertical gap between name and first bubble, and between bubbles (tighter = closer to head) */
+const BUBBLE_OFFSET_Y = 0.32;
+/** Name/bubble base height above avatar origin (slightly above head) */
+const LABEL_BASE_Y = 2.05;
+/** Smaller = larger on screen; 5 makes bubbles read clearly near the character */
+const BUBBLE_DISTANCE_FACTOR = 5;
+const BUBBLE_MAX_WIDTH = 200;
+
+export type MoveState = 'idle' | 'walk' | 'run';
 
 function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji }: LocalPlayerProps) {
   const groupRef = useRef<THREE.Group>(null);
@@ -205,10 +215,14 @@ function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji }: Lo
   const keysRef = useRef<Set<string>>(new Set());
   // Character position + facing direction (ry)
   const posRef = useRef({ x: 0, y: 0, z: 0, ry: 0 });
+  /** Vertical velocity for jump (m/s) */
+  const vyRef = useRef(0);
   // Camera orbit angles (independent of character facing)
   const camYawRef = useRef(0);   // horizontal orbit around character
   const camPitchRef = useRef(0.3); // vertical angle
   const lastBroadcast = useRef(0);
+  const [moveState, setMoveState] = useState<MoveState>('idle');
+  const moveStateRef = useRef<MoveState>('idle');
 
   const preset = avatar ? getAvatarPreset(avatar.model) : AVATAR_PRESETS[0];
   const color = avatar?.color ?? preset.color;
@@ -297,16 +311,35 @@ function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji }: Lo
       moveX += 1;
     }
 
+    // Jump: space when on ground
+    if (keys.has(' ') && pos.y <= 0 && vyRef.current <= 0) {
+      vyRef.current = JUMP_VELOCITY;
+    }
+    vyRef.current += GRAVITY * delta;
+    pos.y += vyRef.current * delta;
+    if (pos.y < 0) {
+      pos.y = 0;
+      vyRef.current = 0;
+    }
+
     if (moveX !== 0 || moveZ !== 0) {
       const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
       moveX /= len;
       moveZ /= len;
 
+      const isRunning = keys.has('shift');
+      const speed = isRunning ? RUN_SPEED : WALK_SPEED;
+      const newMoveState: MoveState = isRunning ? 'run' : 'walk';
+      if (newMoveState !== moveStateRef.current) {
+        moveStateRef.current = newMoveState;
+        setMoveState(newMoveState);
+      }
+
       // Resolve movement relative to camera yaw (not character facing)
       const sin = Math.sin(camYaw);
       const cos = Math.cos(camYaw);
-      const worldX = (moveX * cos - moveZ * sin) * MOVE_SPEED * delta;
-      const worldZ = (moveX * sin + moveZ * cos) * MOVE_SPEED * delta;
+      const worldX = (moveX * cos - moveZ * sin) * speed * delta;
+      const worldZ = (moveX * sin + moveZ * cos) * speed * delta;
       pos.x += worldX;
       pos.z += worldZ;
 
@@ -320,6 +353,11 @@ function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji }: Lo
       // Turn speed: ~10 rad/s convergence, capped at 1.0 to avoid overshoot
       const turnFactor = Math.min(1, 12 * delta);
       pos.ry += diff * turnFactor;
+    } else {
+      if (moveStateRef.current !== 'idle') {
+        moveStateRef.current = 'idle';
+        setMoveState('idle');
+      }
     }
 
     // Clamp to terrain bounds
@@ -363,32 +401,33 @@ function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji }: Lo
         hairColor={avatar?.hairColor}
         isCurrentUser
         emoji={emoji}
+        moveState={moveState}
       />
       {/* Name label */}
-      <Html position={[0, 2.4, 0]} center distanceFactor={10}>
+      <Html position={[0, LABEL_BASE_Y, 0]} center distanceFactor={10}>
         <div className="whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium shadow-lg bg-primary text-primary-foreground">
           {avatar?.displayName || 'You'}
         </div>
       </Html>
-      {/* Speech bubbles (stacked, no overlap) */}
+      {/* Speech bubbles (stacked, close to head, larger) */}
       {activeBubbles.map((bubble, i) => (
         <Html
           key={`${bubble.expiresAt}-${i}`}
-          position={[0, 2.4 + (i + 1) * BUBBLE_OFFSET_Y, 0]}
+          position={[0, LABEL_BASE_Y + (i + 1) * BUBBLE_OFFSET_Y, 0]}
           center
-          distanceFactor={8}
+          distanceFactor={BUBBLE_DISTANCE_FACTOR}
         >
           <div
-            className="rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-lg bg-card border border-border text-foreground animate-in fade-in duration-200"
+            className="rounded-lg px-3 py-2 text-lg font-semibold shadow-lg bg-card border border-border text-foreground animate-in fade-in duration-200"
             style={{ maxWidth: BUBBLE_MAX_WIDTH }}
           >
-            <span className="line-clamp-2 break-words">{bubble.text}</span>
+            <span className="line-clamp-2 break-words uppercase tracking-wide">{bubble.text}</span>
           </div>
         </Html>
       ))}
       {/* Emoji bubble above local player */}
       {emoji && (
-        <Html position={[0, 3.0 + activeBubbles.length * BUBBLE_OFFSET_Y, 0]} center distanceFactor={8}>
+        <Html position={[0, LABEL_BASE_Y + 0.5 + activeBubbles.length * BUBBLE_OFFSET_Y, 0]} center distanceFactor={BUBBLE_DISTANCE_FACTOR}>
           <div className="text-3xl animate-bounce" style={{ animationDuration: '0.6s' }}>
             {emoji}
           </div>
@@ -409,18 +448,54 @@ interface RemotePlayerProps {
   speechBubbles?: SpeechBubbleItem[];
 }
 
+/** Speed thresholds (m/s) for remote avatar */
+const REMOTE_IDLE_SPEED = 0.5;
+const REMOTE_WALK_SPEED = 5.5;
+/** Hysteresis: leave run when below this (avoids flicker) */
+const REMOTE_LEAVE_RUN_SPEED = 4;
+/** Hysteresis: leave walk when below this */
+const REMOTE_LEAVE_WALK_SPEED = 0.35;
+/** Smoothing factor for speed (0=no smooth, 1=no change); lower = smoother */
+const REMOTE_SPEED_LERP = 0.12;
+
 function RemotePlayer({ pubkey, avatar, peerState, speechBubbles = [] }: RemotePlayerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const targetPos = useRef(new THREE.Vector3());
   const targetRot = useRef(0);
+  const prevPos = useRef(new THREE.Vector3());
+  const smoothSpeedRef = useRef(0);
+  const [moveState, setMoveState] = useState<MoveState>('idle');
+  const moveStateRef = useRef<MoveState>('idle');
   const preset = getAvatarPreset(avatar.model);
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!groupRef.current) return;
+
+    const dt = Math.max(delta, 0.001);
+    prevPos.current.copy(groupRef.current.position);
 
     // Smoothly interpolate position
     targetPos.current.set(peerState.position.x, peerState.position.y, peerState.position.z);
     groupRef.current.position.lerp(targetPos.current, 0.15);
+
+    const instantSpeed = groupRef.current.position.distanceTo(prevPos.current) / dt;
+    smoothSpeedRef.current += (instantSpeed - smoothSpeedRef.current) * REMOTE_SPEED_LERP;
+    const speed = smoothSpeedRef.current;
+
+    // Hysteresis: use different thresholds for entering vs leaving each state to avoid jitter
+    const cur = moveStateRef.current;
+    let newMoveState: MoveState;
+    if (cur === 'run') {
+      newMoveState = speed < REMOTE_LEAVE_RUN_SPEED ? (speed < REMOTE_LEAVE_WALK_SPEED ? 'idle' : 'walk') : 'run';
+    } else if (cur === 'walk') {
+      newMoveState = speed < REMOTE_LEAVE_WALK_SPEED ? 'idle' : speed >= REMOTE_WALK_SPEED ? 'run' : 'walk';
+    } else {
+      newMoveState = speed < REMOTE_IDLE_SPEED ? 'idle' : speed >= REMOTE_WALK_SPEED ? 'run' : 'walk';
+    }
+    if (newMoveState !== moveStateRef.current) {
+      moveStateRef.current = newMoveState;
+      setMoveState(newMoveState);
+    }
 
     // Smoothly interpolate rotation
     targetRot.current = peerState.position.ry;
@@ -434,7 +509,7 @@ function RemotePlayer({ pubkey, avatar, peerState, speechBubbles = [] }: RemoteP
 
   const now = Date.now();
   const activeBubbles = speechBubbles.filter((b) => b.expiresAt > now);
-  const emojiY = 3.0 + activeBubbles.length * BUBBLE_OFFSET_Y;
+  const emojiY = LABEL_BASE_Y + 0.5 + activeBubbles.length * BUBBLE_OFFSET_Y;
 
   return (
     <group ref={groupRef}>
@@ -444,32 +519,33 @@ function RemotePlayer({ pubkey, avatar, peerState, speechBubbles = [] }: RemoteP
         hairStyle={avatar.hairStyle}
         hairColor={avatar.hairColor}
         emoji={peerState.emoji}
+        moveState={moveState}
       />
       {/* Name label */}
-      <Html position={[0, 2.4, 0]} center distanceFactor={10}>
+      <Html position={[0, LABEL_BASE_Y, 0]} center distanceFactor={10}>
         <div className="whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium shadow-lg bg-card text-card-foreground border border-border">
           {avatar.displayName || pubkey.slice(0, 8)}
         </div>
       </Html>
-      {/* Speech bubbles (stacked, no overlap) */}
+      {/* Speech bubbles (stacked, close to head, larger) */}
       {activeBubbles.map((bubble, i) => (
         <Html
           key={`${bubble.expiresAt}-${i}`}
-          position={[0, 2.4 + (i + 1) * BUBBLE_OFFSET_Y, 0]}
+          position={[0, LABEL_BASE_Y + (i + 1) * BUBBLE_OFFSET_Y, 0]}
           center
-          distanceFactor={8}
+          distanceFactor={BUBBLE_DISTANCE_FACTOR}
         >
           <div
-            className="rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-lg bg-card border border-border text-foreground animate-in fade-in duration-200"
+            className="rounded-lg px-3 py-2 text-lg font-semibold shadow-lg bg-card border border-border text-foreground animate-in fade-in duration-200"
             style={{ maxWidth: BUBBLE_MAX_WIDTH }}
           >
-            <span className="line-clamp-2 break-words">{bubble.text}</span>
+            <span className="line-clamp-2 break-words uppercase tracking-wide">{bubble.text}</span>
           </div>
         </Html>
       ))}
       {/* Emoji bubble (above speech bubbles) */}
       {peerState.emoji && (
-        <Html position={[0, emojiY, 0]} center distanceFactor={8}>
+        <Html position={[0, emojiY, 0]} center distanceFactor={BUBBLE_DISTANCE_FACTOR}>
           <div className="text-3xl animate-bounce" style={{ animationDuration: '0.6s' }}>
             {peerState.emoji}
           </div>
@@ -664,6 +740,7 @@ export function SceneViewer({
       {/* Controls hint overlay */}
       <div className="absolute bottom-4 right-4 text-xs text-muted-foreground bg-background/70 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none select-none space-y-0.5">
         <div><span className="font-mono">W A S D</span> 移动</div>
+        <div><span className="font-mono">空格</span> 跳跃</div>
         <div>右键拖拽旋转视角</div>
       </div>
     </div>
