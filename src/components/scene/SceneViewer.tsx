@@ -213,34 +213,48 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     };
   }, []);
 
-  // Mouse look via Pointer Lock
+  // Mouse look via right-click drag (no pointer lock)
+  const rightDragging = useRef(false);
+
   useEffect(() => {
     const canvas = gl.domElement;
 
-    const requestLock = () => {
-      canvas.requestPointerLock();
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 2) {
+        rightDragging.current = true;
+        e.preventDefault();
+      }
     };
-
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 2) {
+        rightDragging.current = false;
+      }
+    };
     const onMouseMove = (e: MouseEvent) => {
-      if (document.pointerLockElement !== canvas) return;
-      // Horizontal → yaw
-      posRef.current.ry -= e.movementX * MOUSE_SENSITIVITY;
+      if (!rightDragging.current) return;
+      // Horizontal → yaw (mouse left = character turns left = positive ry)
+      posRef.current.ry += e.movementX * MOUSE_SENSITIVITY;
       // Vertical → pitch (clamped)
       pitchRef.current = Math.max(
         PITCH_MIN,
-        Math.min(PITCH_MAX, pitchRef.current - e.movementY * MOUSE_SENSITIVITY),
+        Math.min(PITCH_MAX, pitchRef.current + e.movementY * MOUSE_SENSITIVITY),
       );
     };
+    // Prevent context menu on right-click inside the canvas
+    const onContextMenu = (e: Event) => {
+      e.preventDefault();
+    };
 
-    canvas.addEventListener('click', requestLock);
-    document.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('contextmenu', onContextMenu);
 
     return () => {
-      canvas.removeEventListener('click', requestLock);
-      document.removeEventListener('mousemove', onMouseMove);
-      if (document.pointerLockElement === canvas) {
-        document.exitPointerLock();
-      }
+      canvas.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('contextmenu', onContextMenu);
     };
   }, [gl]);
 
@@ -515,7 +529,7 @@ export function SceneViewer({
       {/* Controls hint overlay */}
       <div className="absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/70 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none select-none space-y-0.5">
         <div><span className="font-mono">W A S D</span> move &middot; <span className="font-mono">Q E</span> strafe</div>
-        <div>Click to look &middot; <span className="font-mono">ESC</span> release</div>
+        <div>Right-click drag to look around</div>
       </div>
     </div>
   );
