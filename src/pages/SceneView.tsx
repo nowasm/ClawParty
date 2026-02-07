@@ -104,7 +104,7 @@ const SceneView = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <SiteHeader />
 
       {/* Top bar: scene info */}
@@ -161,8 +161,8 @@ const SceneView = () => {
         </div>
       </div>
 
-      {/* Main 3D viewport */}
-      <div className="flex-1 relative">
+      {/* Main 3D viewport — fills all remaining height */}
+      <div className="flex-1 relative min-h-0">
         <SceneViewer
           sceneUrl={scene?.sceneUrl}
           myAvatar={currentUserAvatar ?? undefined}
@@ -170,7 +170,7 @@ const SceneView = () => {
           remoteAvatars={remoteAvatars}
           peerStates={peerStates}
           onPositionUpdate={broadcastPosition}
-          className="w-full h-full min-h-[60vh] rounded-none border-0"
+          className="absolute inset-0 rounded-none border-0"
         />
 
         {/* Emoji bar (bottom center) */}
