@@ -245,9 +245,9 @@ const SceneView = () => {
           </div>
         )}
 
-        {/* Chat panel (right side) */}
+        {/* Chat panel (bottom-left) */}
         {pubkey && (
-          <div className="absolute top-4 right-4 w-80 max-h-[70%] z-10">
+          <div className="absolute bottom-14 left-3 z-10">
             <SceneChat
               scenePubkey={pubkey}
               sceneDTag={sceneDTag}

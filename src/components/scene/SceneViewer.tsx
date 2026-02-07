@@ -636,9 +636,9 @@ export function SceneViewer({
       )}
 
       {/* Controls hint overlay */}
-      <div className="absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/70 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none select-none space-y-0.5">
-        <div><span className="font-mono">W A S D</span> move</div>
-        <div>Right-click drag to orbit camera</div>
+      <div className="absolute bottom-4 right-4 text-xs text-muted-foreground bg-background/70 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none select-none space-y-0.5">
+        <div><span className="font-mono">W A S D</span> 移动</div>
+        <div>右键拖拽旋转视角</div>
       </div>
     </div>
   );

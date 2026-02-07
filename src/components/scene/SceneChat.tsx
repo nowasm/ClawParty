@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Smile, MessageCircle, Users, MessageSquare } from 'lucide-react';
+import { Send, Smile, MessageCircle, Users, MessageSquare, ChevronUp, ChevronDown, Hash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -9,14 +9,9 @@ import type { LiveChatMessage } from '@/hooks/useWebRTC';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 const EMOJI_LIST = ['👋', '❤️', '🔥', '😂', '🤩', '👏', '💯', '🎉', '✨', '🚀', '😍', '🙌'];
 
@@ -47,22 +42,21 @@ function ChatMessageItem({ message, isFromMe }: { message: ChatMessage; isFromMe
   });
 
   return (
-    <div
-      className={`flex items-start gap-2 py-1.5 px-1 group hover:bg-muted/50 rounded ${
-        isFromMe ? 'flex-row-reverse' : ''
-      }`}
-    >
-      <Avatar className="h-6 w-6 mt-0.5 shrink-0">
-        <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+    <div className="flex items-start gap-1.5 py-1 px-1 group hover:bg-white/5 rounded transition-colors">
+      <Avatar className="h-5 w-5 mt-0.5 shrink-0">
+        <AvatarFallback className="text-[9px] bg-primary/20 text-primary font-bold">
           {displayName.slice(0, 2).toUpperCase()}
         </AvatarFallback>
       </Avatar>
-      <div className={`min-w-0 flex-1 ${isFromMe ? 'text-right' : ''}`}>
-        <div className={`flex items-baseline gap-2 ${isFromMe ? 'justify-end' : ''}`}>
-          <span className="text-xs font-semibold text-foreground truncate">{displayName}</span>
-          <span className="text-[10px] text-muted-foreground shrink-0">{timeStr}</span>
-        </div>
-        <p className="text-sm text-foreground/90 break-words">{message.content}</p>
+      <div className="min-w-0 flex-1">
+        <span className={cn(
+          "text-[11px] font-semibold mr-1.5",
+          isFromMe ? "text-primary" : "text-blue-400"
+        )}>
+          {displayName}
+        </span>
+        <span className="text-[10px] text-muted-foreground/60 mr-1.5">{timeStr}</span>
+        <span className="text-xs text-foreground/90 break-words">{message.content}</span>
       </div>
     </div>
   );
@@ -71,6 +65,55 @@ function ChatMessageItem({ message, isFromMe }: { message: ChatMessage; isFromMe
 /** Normalize to ChatMessage shape for unified list */
 function toChatMessage(m: LiveChatMessage): ChatMessage {
   return { id: m.id, pubkey: m.pubkey, content: m.content, createdAt: m.createdAt };
+}
+
+/** Sidebar item for a peer with unread indicator */
+function PeerSidebarItem({
+  pubkey,
+  displayName,
+  isSelected,
+  hasUnread,
+  onClick,
+}: {
+  pubkey: string;
+  displayName: string;
+  isSelected: boolean;
+  hasUnread: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onClick}
+            className={cn(
+              "relative w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200",
+              "hover:bg-white/10",
+              isSelected
+                ? "bg-primary/20 ring-1 ring-primary/50"
+                : "bg-white/5"
+            )}
+          >
+            <Avatar className="h-5 w-5">
+              <AvatarFallback className={cn(
+                "text-[9px] font-bold",
+                isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              )}>
+                {displayName.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            {hasUnread && (
+              <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 border border-background animate-pulse" />
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="text-xs">
+          {displayName}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 export function SceneChat({
@@ -92,6 +135,9 @@ export function SceneChat({
   const { data: messages = [], isLoading } = useSceneChat(scenePubkey, sceneDTag);
   const { sendMessage, isPending } = useSendSceneChat();
 
+  // Track which peers have unread messages
+  const [readCounts, setReadCounts] = useState<Record<string, number>>({});
+
   const mergedPublicMessages = useMemo(() => {
     const nostrIds = new Set(messages.map((m) => m.id));
     const liveOnly = liveChatMessages.filter((m) => !nostrIds.has(m.id)).map(toChatMessage);
@@ -103,8 +149,30 @@ export function SceneChat({
     return (privateChatMessages[selectedPeerPubkey] ?? []).sort((a, b) => a.createdAt - b.createdAt);
   }, [selectedPeerPubkey, privateChatMessages]);
 
+  // Peers with private messages (to show in sidebar)
+  const peersWithMessages = useMemo(() => {
+    const peerPubkeys = new Set<string>();
+    for (const pk of Object.keys(privateChatMessages)) {
+      if ((privateChatMessages[pk]?.length ?? 0) > 0) {
+        peerPubkeys.add(pk);
+      }
+    }
+    // Also include connected peers
+    for (const peer of connectedPeers) {
+      peerPubkeys.add(peer.pubkey);
+    }
+    return Array.from(peerPubkeys);
+  }, [privateChatMessages, connectedPeers]);
+
+  // Mark messages as read when viewing a private chat
+  useEffect(() => {
+    if (chatMode === 'private' && selectedPeerPubkey) {
+      const count = privateChatMessages[selectedPeerPubkey]?.length ?? 0;
+      setReadCounts((prev) => ({ ...prev, [selectedPeerPubkey]: count }));
+    }
+  }, [chatMode, selectedPeerPubkey, privateChatMessages]);
+
   const displayMessages = chatMode === 'public' ? mergedPublicMessages : privateMessages;
-  const displayCount = chatMode === 'public' ? mergedPublicMessages.length : privateMessages.length;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -138,147 +206,239 @@ export function SceneChat({
     setInput((prev) => prev + emoji);
   };
 
+  const handleSelectPeer = (pubkey: string) => {
+    setChatMode('private');
+    setSelectedPeerPubkey(pubkey);
+  };
+
+  const handleSelectPublic = () => {
+    setChatMode('public');
+    setSelectedPeerPubkey('');
+  };
+
   const canSend = user && (chatMode === 'public' ? true : !!selectedPeerPubkey) && input.trim();
   const sendDisabled = !canSend || (chatMode === 'public' && isPending);
 
+  const getPeerDisplayName = (pubkey: string) => {
+    const peer = connectedPeers.find((p) => p.pubkey === pubkey);
+    return peer?.displayName || pubkey.slice(0, 8) + '…';
+  };
+
+  const hasUnreadForPeer = (pubkey: string) => {
+    const total = privateChatMessages[pubkey]?.length ?? 0;
+    const read = readCounts[pubkey] ?? 0;
+    return total > read;
+  };
+
+  const totalUnread = peersWithMessages.filter(hasUnreadForPeer).length;
+
+  // Collapsed state: small floating button
   if (isCollapsed) {
     return (
       <Button
         variant="outline"
         size="sm"
-        className="fixed bottom-4 right-4 z-50 shadow-lg gap-2"
+        className="shadow-lg gap-2 bg-card/90 backdrop-blur-sm border-border/50 hover:bg-card"
         onClick={() => setIsCollapsed(false)}
       >
         <MessageCircle className="h-4 w-4" />
-        Chat
-        {displayCount > 0 && (
-          <span className="bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold">
-            {displayCount}
-          </span>
+        聊天
+        {(mergedPublicMessages.length > 0 || totalUnread > 0) && (
+          <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] font-bold">
+            {totalUnread > 0 ? totalUnread : mergedPublicMessages.length}
+          </Badge>
         )}
+        <ChevronUp className="h-3 w-3 ml-0.5" />
       </Button>
     );
   }
 
+  const selectedPeerName = selectedPeerPubkey ? getPeerDisplayName(selectedPeerPubkey) : '';
+
   return (
-    <div className={`flex flex-col bg-card/95 backdrop-blur-sm border border-border rounded-xl shadow-xl ${className ?? ''}`}>
-      {/* Header with tabs */}
-      <div className="flex items-center justify-between px-2 py-2 border-b border-border">
-        <Tabs value={chatMode} onValueChange={(v) => setChatMode(v as ChatMode)} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 h-8">
-            <TabsTrigger value="public" className="gap-1.5 text-xs">
-              <Users className="h-3.5 w-3.5" />
-              公共
-              <span className="text-muted-foreground">({mergedPublicMessages.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="private" className="gap-1.5 text-xs">
-              <MessageSquare className="h-3.5 w-3.5" />
-              私聊
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground ml-1"
-          onClick={() => setIsCollapsed(true)}
-        >
-          &minus;
-        </Button>
-      </div>
+    <div className={cn(
+      "flex bg-card/90 backdrop-blur-md border border-border/50 rounded-xl shadow-2xl overflow-hidden",
+      "w-[380px] h-[320px]",
+      className,
+    )}>
+      {/* Left sidebar: channels + peers */}
+      <div className="w-11 shrink-0 bg-black/10 border-r border-border/30 flex flex-col py-2 px-1 gap-1 items-center">
+        {/* Public channel */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleSelectPublic}
+                className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200",
+                  "hover:bg-white/10",
+                  chatMode === 'public'
+                    ? "bg-primary/20 ring-1 ring-primary/50"
+                    : "bg-white/5"
+                )}
+              >
+                <Hash className={cn(
+                  "h-4 w-4",
+                  chatMode === 'public' ? "text-primary" : "text-muted-foreground"
+                )} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs">
+              公共频道
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
-      {chatMode === 'private' && (
-        <div className="px-3 py-2 border-b border-border">
-          <Select value={selectedPeerPubkey} onValueChange={setSelectedPeerPubkey}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="选择私聊对象..." />
-            </SelectTrigger>
-            <SelectContent>
-              {connectedPeers.map((peer) => (
-                <SelectItem key={peer.pubkey} value={peer.pubkey} className="text-xs">
-                  {peer.displayName || peer.pubkey.slice(0, 12) + '…'}
-                </SelectItem>
-              ))}
-              {connectedPeers.length === 0 && (
-                <div className="py-2 px-2 text-xs text-muted-foreground">暂无在线用户</div>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+        {/* Divider */}
+        {peersWithMessages.length > 0 && (
+          <div className="w-5 h-px bg-border/40 my-0.5" />
+        )}
 
-      {/* Messages */}
-      <ScrollArea ref={scrollRef} className="flex-1 h-[260px] px-2">
-        {chatMode === 'public' && isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-muted-foreground">Loading messages...</p>
-          </div>
-        ) : chatMode === 'private' && !selectedPeerPubkey ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-muted-foreground">选择上方用户开始私聊</p>
-          </div>
-        ) : displayMessages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-muted-foreground">
-              {chatMode === 'private' ? '暂无消息，发一句打个招呼吧' : 'No messages yet. Say hello!'}
-            </p>
-          </div>
-        ) : (
-          <div className="py-2 space-y-0.5">
-            {displayMessages.map((msg) => (
-              <ChatMessageItem key={msg.id} message={msg} isFromMe={user?.pubkey === msg.pubkey} />
+        {/* Players with messages / connected peers */}
+        <ScrollArea className="flex-1 w-full">
+          <div className="flex flex-col gap-1 items-center px-0.5">
+            {peersWithMessages.map((pk) => (
+              <PeerSidebarItem
+                key={pk}
+                pubkey={pk}
+                displayName={getPeerDisplayName(pk)}
+                isSelected={chatMode === 'private' && selectedPeerPubkey === pk}
+                hasUnread={hasUnreadForPeer(pk)}
+                onClick={() => handleSelectPeer(pk)}
+              />
             ))}
           </div>
-        )}
-      </ScrollArea>
+        </ScrollArea>
 
-      {/* Input */}
-      {user ? (
-        <div className="px-3 py-2 border-t border-border">
-          <div className="flex items-center gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
-                  <Smile className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-2" side="top" align="start">
-                <div className="grid grid-cols-6 gap-1">
-                  {EMOJI_LIST.map((emoji) => (
-                    <button
-                      key={emoji}
-                      className="h-8 w-8 flex items-center justify-center rounded hover:bg-muted transition-colors text-lg"
-                      onClick={() => handleEmojiSelect(emoji)}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={chatMode === 'private' && !selectedPeerPubkey ? '请先选择私聊对象' : 'Type a message...'}
-              className="h-8 text-sm"
-              disabled={chatMode === 'public' ? isPending : false}
-            />
-            <Button
-              size="sm"
-              className="h-8 w-8 p-0 shrink-0"
-              onClick={handleSend}
-              disabled={sendDisabled}
-            >
-              <Send className="h-3.5 w-3.5" />
-            </Button>
+        {/* Online count */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="w-8 h-6 rounded flex items-center justify-center text-[10px] text-muted-foreground/70">
+                <Users className="h-3 w-3 mr-0.5" />
+                {connectedPeers.length}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs">
+              在线: {connectedPeers.length} 人
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      {/* Main chat area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/30 shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {chatMode === 'public' ? (
+              <>
+                <Hash className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs font-semibold truncate">公共频道</span>
+                <span className="text-[10px] text-muted-foreground">({mergedPublicMessages.length})</span>
+              </>
+            ) : (
+              <>
+                <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs font-semibold truncate">
+                  {selectedPeerName || '私聊'}
+                </span>
+              </>
+            )}
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 w-5 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={() => setIsCollapsed(true)}
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+          </Button>
         </div>
-      ) : (
-        <div className="px-3 py-2 border-t border-border">
-          <p className="text-xs text-muted-foreground text-center">Log in to chat</p>
-        </div>
-      )}
+
+        {/* Messages */}
+        <ScrollArea ref={scrollRef} className="flex-1 px-1">
+          {chatMode === 'public' && isLoading ? (
+            <div className="flex items-center justify-center h-full py-8">
+              <p className="text-xs text-muted-foreground">加载消息中...</p>
+            </div>
+          ) : chatMode === 'private' && !selectedPeerPubkey ? (
+            <div className="flex items-center justify-center h-full py-8">
+              <p className="text-xs text-muted-foreground">← 选择左侧玩家开始私聊</p>
+            </div>
+          ) : displayMessages.length === 0 ? (
+            <div className="flex items-center justify-center h-full py-8">
+              <p className="text-xs text-muted-foreground">
+                {chatMode === 'private' ? '暂无消息，打个招呼吧' : '暂无消息，说点什么吧'}
+              </p>
+            </div>
+          ) : (
+            <div className="py-1 space-y-0">
+              {displayMessages.map((msg) => (
+                <ChatMessageItem
+                  key={msg.id}
+                  message={msg}
+                  isFromMe={user?.pubkey === msg.pubkey}
+                />
+              ))}
+            </div>
+          )}
+        </ScrollArea>
+
+        {/* Input */}
+        {user ? (
+          <div className="px-2 py-1.5 border-t border-border/30 shrink-0">
+            <div className="flex items-center gap-1.5">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0">
+                    <Smile className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-2" side="top" align="start">
+                  <div className="grid grid-cols-6 gap-1">
+                    {EMOJI_LIST.map((emoji) => (
+                      <button
+                        key={emoji}
+                        className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted transition-colors text-base"
+                        onClick={() => handleEmojiSelect(emoji)}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  chatMode === 'private' && !selectedPeerPubkey
+                    ? '请先选择私聊对象'
+                    : chatMode === 'private'
+                      ? `发消息给 ${selectedPeerName}...`
+                      : '发送消息...'
+                }
+                className="h-7 text-xs bg-black/10 border-border/30"
+                disabled={chatMode === 'public' ? isPending : false}
+              />
+              <Button
+                size="sm"
+                className="h-7 w-7 p-0 shrink-0"
+                onClick={handleSend}
+                disabled={sendDisabled}
+              >
+                <Send className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-3 py-1.5 border-t border-border/30 shrink-0">
+            <p className="text-[10px] text-muted-foreground text-center">登录后可参与聊天</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
