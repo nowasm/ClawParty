@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { SCENE_TAG } from '@/lib/scene';
-import { publishToDefaultRelays } from '@/lib/relayPool';
 
 interface PublishSceneParams {
   dTag: string;
@@ -15,7 +14,7 @@ interface PublishSceneParams {
 
 /**
  * Publish or update the current user's 3D scene (kind 30311).
- * Uses a persistent relay pool so connections are reused.
+ * Uses the NPool from NostrProvider which publishes to all configured write relays.
  */
 export function usePublishScene() {
   const { nostr } = useNostr();
@@ -47,13 +46,12 @@ export function usePublishScene() {
         created_at: Math.floor(Date.now() / 1000),
       });
 
-      console.log('Scene event signed:', event.id);
+      console.log('[usePublishScene] Event signed:', event.id);
 
-      // Publish to all default relays via persistent connections
-      await publishToDefaultRelays(event);
+      // Publish to all write relays via NPool
+      await nostr.event(event, { signal: AbortSignal.timeout(15000) });
 
-      // Also try user's configured relays via pool (fire-and-forget)
-      nostr.event(event, { signal: AbortSignal.timeout(5000) }).catch(() => {});
+      console.log('[usePublishScene] Event published successfully');
 
       // Invalidate scene queries to refresh lists
       queryClient.invalidateQueries({ queryKey: ['scenes'] });
