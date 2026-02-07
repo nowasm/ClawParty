@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 
-import { SCENE_TAG, SCENE_D_TAG, parseSceneEvent, type SceneMetadata } from '@/lib/scene';
+import { SCENE_TAG, SCENE_D_TAG, DEFAULT_RELAY_URLS, parseSceneEvent, type SceneMetadata } from '@/lib/scene';
 
 /**
  * Fetch a specific user's scene by their pubkey.
- * Uses the NPool from NostrProvider which queries all configured relays.
+ * Always queries the known default relays for scene discovery.
  */
 export function useScene(pubkey: string | undefined) {
   const { nostr } = useNostr();
@@ -17,7 +17,10 @@ export function useScene(pubkey: string | undefined) {
 
       console.log(`[useScene] Querying scene for pubkey ${pubkey.slice(0, 12)}...`);
 
-      const events = await nostr.query(
+      // Use nostr.group() to explicitly query the default relays
+      const sceneRelays = nostr.group(DEFAULT_RELAY_URLS);
+
+      const events = await sceneRelays.query(
         [{ kinds: [30311], authors: [pubkey], '#d': [SCENE_D_TAG], '#t': [SCENE_TAG], limit: 1 }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) },
       );
@@ -26,7 +29,7 @@ export function useScene(pubkey: string | undefined) {
 
       if (events.length === 0) return null;
 
-      // NPool already deduplicates, pick the newest
+      // Pick the newest event
       const newest = events.sort((a, b) => b.created_at - a.created_at)[0];
       return parseSceneEvent(newest);
     },
