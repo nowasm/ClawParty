@@ -29,17 +29,27 @@ export interface AvatarPreset {
   name: string;
   color: string;
   shape: 'capsule' | 'cube' | 'sphere' | 'cylinder';
+  /** Short description for the selection UI */
+  desc: string;
 }
 
 export const AVATAR_PRESETS: AvatarPreset[] = [
-  { id: 'capsule-blue', name: 'Blue Explorer', color: '#3B82F6', shape: 'capsule' },
-  { id: 'capsule-red', name: 'Red Warrior', color: '#EF4444', shape: 'capsule' },
-  { id: 'capsule-green', name: 'Green Scout', color: '#22C55E', shape: 'capsule' },
-  { id: 'capsule-purple', name: 'Purple Mystic', color: '#A855F7', shape: 'capsule' },
-  { id: 'capsule-orange', name: 'Orange Pioneer', color: '#F97316', shape: 'capsule' },
-  { id: 'cube-cyan', name: 'Cyan Cube', color: '#06B6D4', shape: 'cube' },
-  { id: 'sphere-pink', name: 'Pink Orb', color: '#EC4899', shape: 'sphere' },
-  { id: 'cylinder-yellow', name: 'Gold Pillar', color: '#EAB308', shape: 'cylinder' },
+  // Classic (capsule) characters
+  { id: 'capsule-blue', name: 'Explorer', color: '#3B82F6', shape: 'capsule', desc: 'A brave adventurer' },
+  { id: 'capsule-red', name: 'Warrior', color: '#EF4444', shape: 'capsule', desc: 'A fierce fighter' },
+  { id: 'capsule-green', name: 'Scout', color: '#22C55E', shape: 'capsule', desc: 'A nimble pathfinder' },
+  { id: 'capsule-purple', name: 'Mystic', color: '#A855F7', shape: 'capsule', desc: 'A magical sorcerer' },
+  { id: 'capsule-orange', name: 'Pioneer', color: '#F97316', shape: 'capsule', desc: 'A daring builder' },
+  // Robot (cube) characters
+  { id: 'cube-cyan', name: 'Cyber Bot', color: '#06B6D4', shape: 'cube', desc: 'A high-tech android' },
+  { id: 'cube-steel', name: 'Iron Guard', color: '#64748B', shape: 'cube', desc: 'A steel sentinel' },
+  { id: 'cube-gold', name: 'Gilded Mech', color: '#EAB308', shape: 'cube', desc: 'A golden automaton' },
+  // Slime (sphere) characters
+  { id: 'sphere-pink', name: 'Pink Slime', color: '#EC4899', shape: 'sphere', desc: 'A bouncy jelly blob' },
+  { id: 'sphere-lime', name: 'Lime Slime', color: '#84CC16', shape: 'sphere', desc: 'A squishy friend' },
+  // Knight (cylinder) characters
+  { id: 'cylinder-silver', name: 'Silver Knight', color: '#94A3B8', shape: 'cylinder', desc: 'A noble guardian' },
+  { id: 'cylinder-crimson', name: 'Dark Knight', color: '#991B1B', shape: 'cylinder', desc: 'A shadowy protector' },
 ];
 
 /** Avatar configuration stored in kind 30078 content */
