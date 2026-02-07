@@ -14,8 +14,8 @@ interface PublishSceneParams {
 
 /**
  * Publish or update the current user's 3D scene (kind 30311).
- * Signs the event with the user's signer and publishes directly
- * to the default relay group, ensuring discoverability for all clients.
+ * Signs the event and broadcasts to each default relay individually.
+ * Navigation proceeds as long as the event is signed, even if some relays fail.
  */
 export function usePublishScene() {
   const { nostr } = useNostr();
@@ -47,16 +47,28 @@ export function usePublishScene() {
         created_at: Math.floor(Date.now() / 1000),
       });
 
-      // Publish to default relays first (primary — ensures all clients can find it)
-      const defaultGroup = nostr.group(DEFAULT_RELAY_URLS);
-      await defaultGroup.event(event, { signal: AbortSignal.timeout(10000) });
+      console.log('Scene event signed:', event.id);
 
-      // Also publish to user's configured relays (best-effort)
-      try {
-        await nostr.event(event, { signal: AbortSignal.timeout(5000) });
-      } catch (err) {
-        console.warn('Failed to broadcast to user relays (non-fatal):', err);
-      }
+      // Publish to each default relay individually (don't let one failure block others)
+      const relayResults = await Promise.allSettled(
+        DEFAULT_RELAY_URLS.map(async (url) => {
+          try {
+            const relay = nostr.relay(url);
+            await relay.event(event, { signal: AbortSignal.timeout(8000) });
+            console.log(`Published to ${url}`);
+            return url;
+          } catch (err) {
+            console.warn(`Failed to publish to ${url}:`, err);
+            throw err;
+          }
+        }),
+      );
+
+      const succeeded = relayResults.filter((r) => r.status === 'fulfilled').length;
+      console.log(`Scene published to ${succeeded}/${DEFAULT_RELAY_URLS.length} relays`);
+
+      // Also try user's configured relays (fire-and-forget)
+      nostr.event(event, { signal: AbortSignal.timeout(5000) }).catch(() => {});
 
       // Invalidate scene queries to refresh lists
       queryClient.invalidateQueries({ queryKey: ['scenes'] });

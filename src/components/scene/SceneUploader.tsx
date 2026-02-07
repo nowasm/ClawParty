@@ -136,13 +136,14 @@ export function SceneUploader({ initialData, onSuccess }: SceneUploaderProps) {
     const finalSceneUrl = isCustomUpload ? sceneUrl : (selectedPreset?.sceneUrl ?? '');
 
     try {
-      await publishScene({
+      const event = await publishScene({
         dTag: SCENE_D_TAG,
         title: title.trim(),
         summary: summary.trim(),
         imageUrl,
         sceneUrl: finalSceneUrl,
       });
+      console.log('Scene published successfully, event ID:', event.id);
       toast({
         title: isEditing ? 'Scene updated' : 'Scene published',
         description: `"${title}" is now ${isEditing ? 'updated' : 'live'}!`,
@@ -152,7 +153,7 @@ export function SceneUploader({ initialData, onSuccess }: SceneUploaderProps) {
       console.error('Failed to publish scene:', error);
       toast({
         title: 'Publish failed',
-        description: 'Could not publish your scene. Please try again.',
+        description: String(error instanceof Error ? error.message : 'Could not publish your scene. Please try again.'),
         variant: 'destructive',
       });
     }
