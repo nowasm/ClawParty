@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useMemo } from 'react';
 import { useSceneChat, useSendSceneChat, type ChatMessage } from '@/hooks/useSceneChat';
+import type { LiveChatMessage } from '@/hooks/useWebRTC';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -14,6 +16,10 @@ const EMOJI_LIST = ['👋', '❤️', '🔥', '😂', '🤩', '👏', '💯', '�
 interface SceneChatProps {
   scenePubkey: string;
   sceneDTag: string;
+  /** Instant messages from WebRTC (merged with Nostr messages in UI) */
+  liveChatMessages?: LiveChatMessage[];
+  /** Send instant message to peers in scene (WebRTC) */
+  onSendLiveChat?: (text: string) => void;
   className?: string;
 }
 
@@ -43,7 +49,12 @@ function ChatMessageItem({ message }: { message: ChatMessage }) {
   );
 }
 
-export function SceneChat({ scenePubkey, sceneDTag, className }: SceneChatProps) {
+/** Normalize to ChatMessage shape for unified list */
+function toChatMessage(m: LiveChatMessage): ChatMessage {
+  return { id: m.id, pubkey: m.pubkey, content: m.content, createdAt: m.createdAt };
+}
+
+export function SceneChat({ scenePubkey, sceneDTag, liveChatMessages = [], onSendLiveChat, className }: SceneChatProps) {
   const [input, setInput] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -51,7 +62,12 @@ export function SceneChat({ scenePubkey, sceneDTag, className }: SceneChatProps)
   const { data: messages = [], isLoading } = useSceneChat(scenePubkey, sceneDTag);
   const { sendMessage, isPending } = useSendSceneChat();
 
-  // Auto-scroll to bottom on new messages
+  const mergedMessages = useMemo(() => {
+    const nostrIds = new Set(messages.map((m) => m.id));
+    const liveOnly = liveChatMessages.filter((m) => !nostrIds.has(m.id)).map(toChatMessage);
+    return [...messages, ...liveOnly].sort((a, b) => a.createdAt - b.createdAt);
+  }, [messages, liveChatMessages]);
+
   useEffect(() => {
     if (scrollRef.current) {
       const el = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
@@ -59,12 +75,14 @@ export function SceneChat({ scenePubkey, sceneDTag, className }: SceneChatProps)
         el.scrollTop = el.scrollHeight;
       }
     }
-  }, [messages.length]);
+  }, [mergedMessages.length]);
 
   const handleSend = async () => {
     if (!input.trim() || !user) return;
-    await sendMessage(scenePubkey, sceneDTag, input);
+    const text = input.trim();
     setInput('');
+    onSendLiveChat?.(text);
+    await sendMessage(scenePubkey, sceneDTag, text);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -88,9 +106,9 @@ export function SceneChat({ scenePubkey, sceneDTag, className }: SceneChatProps)
       >
         <MessageCircle className="h-4 w-4" />
         Chat
-        {messages.length > 0 && (
+        {mergedMessages.length > 0 && (
           <span className="bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold">
-            {messages.length}
+            {mergedMessages.length}
           </span>
         )}
       </Button>
@@ -104,7 +122,7 @@ export function SceneChat({ scenePubkey, sceneDTag, className }: SceneChatProps)
         <div className="flex items-center gap-2">
           <MessageCircle className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Chat</span>
-          <span className="text-xs text-muted-foreground">({messages.length})</span>
+          <span className="text-xs text-muted-foreground">({mergedMessages.length})</span>
         </div>
         <Button
           variant="ghost"
@@ -122,13 +140,13 @@ export function SceneChat({ scenePubkey, sceneDTag, className }: SceneChatProps)
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-muted-foreground">Loading messages...</p>
           </div>
-        ) : messages.length === 0 ? (
+        ) : mergedMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-muted-foreground">No messages yet. Say hello!</p>
           </div>
         ) : (
           <div className="py-2 space-y-0.5">
-            {messages.map((msg) => (
+            {mergedMessages.map((msg) => (
               <ChatMessageItem key={msg.id} message={msg} />
             ))}
           </div>

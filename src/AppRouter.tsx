@@ -10,9 +10,11 @@ import Settings from "./pages/Settings";
 import { NIP19Page } from "./pages/NIP19Page";
 import NotFound from "./pages/NotFound";
 
+const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true };
+
 export function AppRouter() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={routerFuture}>
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<SceneExplorer />} />

@@ -3,7 +3,7 @@ import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { WebRTCManager, type PeerState, type PeerPosition, type DataChannelMessage, type SignalMessage } from '@/lib/webrtc';
-import { sceneAddress } from '@/lib/scene';
+import { sceneAddress, DEFAULT_RELAY_URLS } from '@/lib/scene';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 /** Ephemeral kind for WebRTC signaling (application-specific) */
@@ -15,11 +15,24 @@ const POSITION_INTERVAL = 66;
 /** Emoji display duration in ms */
 const EMOJI_DURATION = 3000;
 
+/** Re-announce presence so late joiners discover us */
+const PRESENCE_INTERVAL_MS = 20000;
+
 interface UseWebRTCOptions {
   scenePubkey: string | undefined;
   sceneDTag: string | undefined;
   enabled?: boolean;
 }
+
+/** Live chat message from WebRTC (same shape as ChatMessage for merging in UI) */
+export interface LiveChatMessage {
+  id: string;
+  pubkey: string;
+  content: string;
+  createdAt: number;
+}
+
+const MAX_LIVE_CHAT = 100;
 
 interface UseWebRTCReturn {
   /** Map of remote peer pubkeys -> their latest state */
@@ -32,6 +45,8 @@ interface UseWebRTCReturn {
   broadcastEmoji: (emoji: string) => void;
   /** Send a chat message to all peers (for instant delivery, supplements kind 1311) */
   broadcastChat: (text: string) => void;
+  /** Recent chat messages received over WebRTC (instant, in-scene only) */
+  liveChatMessages: LiveChatMessage[];
   /** Whether WebRTC is active */
   isActive: boolean;
 }
@@ -44,28 +59,36 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
   const managerRef = useRef<WebRTCManager | null>(null);
   const [peerStates, setPeerStates] = useState<Record<string, PeerState>>({});
   const [connectedCount, setConnectedCount] = useState(0);
+  const [liveChatMessages, setLiveChatMessages] = useState<LiveChatMessage[]>([]);
   const peerStatesRef = useRef<Record<string, PeerState>>({});
+  const liveChatRef = useRef<LiveChatMessage[]>([]);
 
   const address = scenePubkey && sceneDTag ? sceneAddress(scenePubkey, sceneDTag) : '';
   const isActive = !!user && !!address && enabled;
 
-  // Send signaling message via Nostr (ephemeral event kind 25050)
+  // Send signaling message via Nostr (kind 25050); publish to user relays and to default relays so all peers see it
   const sendSignal = useCallback(async (msg: SignalMessage) => {
     if (!user) return;
+    const payload = {
+      kind: SIGNAL_KIND,
+      content: JSON.stringify(msg),
+      tags: [
+        ['p', msg.to],
+        ['a', address],
+        ['t', 'webrtc-signal'],
+      ] as string[][],
+    };
     try {
-      await publishEvent({
-        kind: SIGNAL_KIND,
-        content: JSON.stringify(msg),
-        tags: [
-          ['p', msg.to],
-          ['a', address],
-          ['t', 'webrtc-signal'],
-        ],
-      });
+      const event = await publishEvent(payload);
+      try {
+        await nostr.group(DEFAULT_RELAY_URLS).event(event, { signal: AbortSignal.timeout(5000) });
+      } catch {
+        // Default relays best-effort
+      }
     } catch (err) {
       console.warn('Failed to send WebRTC signal:', err);
     }
-  }, [user, publishEvent, address]);
+  }, [user, publishEvent, address, nostr]);
 
   // Initialize WebRTC manager and Nostr signaling subscription
   useEffect(() => {
@@ -122,6 +145,18 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
         delete next[from];
         peerStatesRef.current = next;
         setPeerStates(next);
+      } else if (msg.type === 'chat') {
+        const list = liveChatRef.current;
+        const entry: LiveChatMessage = {
+          id: `live-${from}-${now}-${list.length}`,
+          pubkey: from,
+          content: msg.text,
+          createdAt: Math.floor(now / 1000),
+        };
+        list.push(entry);
+        if (list.length > MAX_LIVE_CHAT) list.shift();
+        liveChatRef.current = list;
+        setLiveChatMessages([...list]);
       }
     };
 
@@ -146,13 +181,15 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
       if (changed) setPeerStates({ ...peerStatesRef.current });
     }, POSITION_INTERVAL);
 
+    // Use default relays for WebRTC signaling so all clients see the same events
+    const signalingRelays = nostr.group(DEFAULT_RELAY_URLS);
+
     // Subscribe to Nostr for incoming signaling messages
     const controller = new AbortController();
 
     (async () => {
       try {
-        // Announce presence by subscribing to signals addressed to us in this scene
-        for await (const msg of nostr.req(
+        for await (const msg of signalingRelays.req(
           [{
             kinds: [SIGNAL_KIND],
             '#p': [user.pubkey],
@@ -176,12 +213,12 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
       }
     })();
 
-    // Also subscribe to "join" announcements to discover peers
+    // Subscribe to signals in scene to discover peers (e.g. offers from others)
     const joinController = new AbortController();
 
     (async () => {
       try {
-        for await (const msg of nostr.req(
+        for await (const msg of signalingRelays.req(
           [{
             kinds: [SIGNAL_KIND],
             '#a': [address],
@@ -196,9 +233,9 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
             // If they're sending an offer, we should also connect to them
             try {
               const signal = JSON.parse(event.content) as SignalMessage;
+              // Discover peer from their offer to someone else; only we (lower pubkey) initiate to avoid glare
               if (signal.from !== user.pubkey && signal.type === 'offer' && signal.to !== user.pubkey) {
-                // Another peer is in this scene, initiate connection if we haven't
-                manager.connectToPeer(signal.from);
+                if (user.pubkey < signal.from) manager.connectToPeer(signal.from);
               }
               // Handle signals addressed to us
               if (signal.to === user.pubkey) {
@@ -214,30 +251,36 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
       }
     })();
 
-    // Announce our presence by sending a "ping" signal to the scene
-    // This causes other users' subscriptions to see us and connect
+    // Announce our presence so other users in the scene can discover and connect to us
+    const presencePayload = {
+      kind: SIGNAL_KIND,
+      content: JSON.stringify({ type: 'presence', from: user.pubkey, sceneId: address }),
+      tags: [
+        ['a', address],
+        ['t', 'webrtc-signal'],
+        ['t', 'presence'],
+      ] as string[][],
+    };
     const announcePresence = async () => {
       try {
-        await publishEvent({
-          kind: SIGNAL_KIND,
-          content: JSON.stringify({ type: 'presence', from: user.pubkey, sceneId: address }),
-          tags: [
-            ['a', address],
-            ['t', 'webrtc-signal'],
-            ['t', 'presence'],
-          ],
-        });
+        const event = await publishEvent(presencePayload);
+        try {
+          await signalingRelays.event(event, { signal: AbortSignal.timeout(5000) });
+        } catch {
+          // Best-effort to default relays
+        }
       } catch {
         // Ignore
       }
     };
     announcePresence();
+    const presenceInterval = setInterval(announcePresence, PRESENCE_INTERVAL_MS);
 
     // Listen for presence announcements from others
     const presenceController = new AbortController();
     (async () => {
       try {
-        for await (const msg of nostr.req(
+        for await (const msg of signalingRelays.req(
           [{
             kinds: [SIGNAL_KIND],
             '#a': [address],
@@ -251,7 +294,8 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
             try {
               const data = JSON.parse(event.content);
               if (data.from && data.from !== user.pubkey) {
-                manager.connectToPeer(data.from);
+                // Only we (lower pubkey) initiate to avoid duplicate connections (glare)
+                if (user.pubkey < data.from) manager.connectToPeer(data.from);
               }
             } catch {
               // Ignore
@@ -265,14 +309,17 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
 
     return () => {
       clearInterval(flushInterval);
+      clearInterval(presenceInterval);
       controller.abort();
       joinController.abort();
       presenceController.abort();
       manager.destroy();
       managerRef.current = null;
       peerStatesRef.current = {};
+      liveChatRef.current = [];
       setPeerStates({});
       setConnectedCount(0);
+      setLiveChatMessages([]);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, address, user?.pubkey]);
@@ -301,6 +348,7 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
     broadcastPosition,
     broadcastEmoji,
     broadcastChat,
+    liveChatMessages,
     isActive,
   };
 }

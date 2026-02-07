@@ -12,7 +12,7 @@ import type { PeerState, PeerPosition } from '@/lib/webrtc';
 
 const TERRAIN_SIZE = 100; // 100m x 100m
 const MOVE_SPEED = 8; // meters per second
-const ROTATE_SPEED = 2.5; // radians per second
+const _ROTATE_SPEED = 2.5; // radians per second (reserved for future use)
 const CAMERA_HEIGHT = 4;
 const CAMERA_DISTANCE = 12;
 const CAMERA_LERP = 0.1;
@@ -57,39 +57,40 @@ interface TerrainTheme {
   envPreset: 'sunset' | 'dawn' | 'night' | 'warehouse' | 'city' | 'park' | 'apartment' | 'studio' | 'forest' | 'lobby';
 }
 
+// THREE.Color only supports 6-digit hex; no alpha (8-digit) to avoid "Invalid hex color" warnings
 const TERRAIN_THEMES: Record<string, TerrainTheme> = {
   '': {
-    groundColor: '#4a7c59', gridColor1: '#5a8c69', gridColor2: '#4a7c5940',
+    groundColor: '#4a7c59', gridColor1: '#5a8c69', gridColor2: '#6a9c79',
     rockColor: '#78716c', markerColor: '#d97706',
     fogColor: '#c9daf8', skyProps: { sunPosition: [100, 60, 100], turbidity: 3, rayleigh: 0.5 },
     envPreset: 'sunset',
   },
   '__preset__desert': {
-    groundColor: '#c2956a', gridColor1: '#d4a574', gridColor2: '#c2956a40',
+    groundColor: '#c2956a', gridColor1: '#d4a574', gridColor2: '#d9b088',
     rockColor: '#a08060', markerColor: '#ef4444',
     fogColor: '#f5e6d3', skyProps: { sunPosition: [80, 30, 60], turbidity: 8, rayleigh: 1.5 },
     envPreset: 'sunset',
   },
   '__preset__snow': {
-    groundColor: '#e8edf2', gridColor1: '#d0d8e0', gridColor2: '#b8c4d040',
+    groundColor: '#e8edf2', gridColor1: '#d0d8e0', gridColor2: '#c8d4e0',
     rockColor: '#94a3b8', markerColor: '#3b82f6',
     fogColor: '#e2e8f0', skyProps: { sunPosition: [50, 20, 80], turbidity: 0.5, rayleigh: 0.2 },
     envPreset: 'dawn',
   },
   '__preset__lava': {
-    groundColor: '#2a1a1a', gridColor1: '#ff440030', gridColor2: '#ff220015',
+    groundColor: '#2a1a1a', gridColor1: '#ff5522', gridColor2: '#cc3311',
     rockColor: '#1a1a1a', markerColor: '#ff4400',
     fogColor: '#1a0a0a', skyProps: { sunPosition: [30, 10, 50], turbidity: 10, rayleigh: 3 },
     envPreset: 'night',
   },
   '__preset__ocean': {
-    groundColor: '#2d6a8a', gridColor1: '#3d8ab0', gridColor2: '#2d6a8a40',
+    groundColor: '#2d6a8a', gridColor1: '#3d8ab0', gridColor2: '#4d9ac0',
     rockColor: '#5ea0b0', markerColor: '#22d3ee',
     fogColor: '#bae6fd', skyProps: { sunPosition: [100, 50, 80], turbidity: 2, rayleigh: 0.8 },
     envPreset: 'lobby',
   },
   '__preset__night': {
-    groundColor: '#1e1b2e', gridColor1: '#a855f730', gridColor2: '#6366f120',
+    groundColor: '#1e1b2e', gridColor1: '#b865f7', gridColor2: '#7374f1',
     rockColor: '#312e4a', markerColor: '#a855f7',
     fogColor: '#0f0d1a', skyProps: { sunPosition: [-100, -10, 50], turbidity: 10, rayleigh: 0.1 },
     envPreset: 'night',

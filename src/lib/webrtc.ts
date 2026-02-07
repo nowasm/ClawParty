@@ -60,6 +60,8 @@ const ICE_SERVERS: RTCIceServer[] = [
 export class WebRTCManager {
   private peers: Map<string, RTCPeerConnection> = new Map();
   private channels: Map<string, RTCDataChannel> = new Map();
+  /** Buffered ICE candidates per peer until remote description is set */
+  private iceBuffers: Map<string, RTCIceCandidateInit[]> = new Map();
   private myPubkey: string;
   private sceneId: string;
 
@@ -110,19 +112,46 @@ export class WebRTCManager {
     });
   }
 
+  /** Flush buffered ICE candidates for a peer (call after setRemoteDescription) */
+  private async flushIceBuffer(remotePubkey: string): Promise<void> {
+    const pc = this.peers.get(remotePubkey);
+    const buffer = this.iceBuffers.get(remotePubkey);
+    if (!pc || !buffer?.length) return;
+    this.iceBuffers.delete(remotePubkey);
+    for (const init of buffer) {
+      try {
+        await pc.addIceCandidate(init);
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
   /** Handle an incoming signaling message */
   async handleSignal(msg: SignalMessage): Promise<void> {
     if (msg.to !== this.myPubkey) return;
     if (msg.sceneId !== this.sceneId) return;
 
     if (msg.type === 'offer') {
-      // We received an offer - create answer
       let pc = this.peers.get(msg.from);
-      if (!pc) {
+      const state = pc?.signalingState;
+
+      // Duplicate offer or already connected: ignore
+      if (state === 'stable' || state === 'have-remote-offer') return;
+
+      // Glare: we already sent an offer (have-local-offer). Act as answerer by replacing this pc.
+      if (pc && state === 'have-local-offer') {
+        pc.close();
+        this.peers.delete(msg.from);
+        this.channels.delete(msg.from);
+        this.iceBuffers.delete(msg.from);
+        pc = this.createPeerConnection(msg.from);
+      } else if (!pc) {
         pc = this.createPeerConnection(msg.from);
       }
 
       await pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp });
+      await this.flushIceBuffer(msg.from);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -137,15 +166,28 @@ export class WebRTCManager {
       const pc = this.peers.get(msg.from);
       if (pc && pc.signalingState === 'have-local-offer') {
         await pc.setRemoteDescription({ type: 'answer', sdp: msg.sdp });
+        await this.flushIceBuffer(msg.from);
       }
     } else if (msg.type === 'ice') {
       const pc = this.peers.get(msg.from);
-      if (pc) {
+      let init: RTCIceCandidateInit;
+      try {
+        init = JSON.parse(msg.candidate) as RTCIceCandidateInit;
+      } catch {
+        return;
+      }
+      if (!pc) return;
+      if (pc.remoteDescription) {
         try {
-          await pc.addIceCandidate(JSON.parse(msg.candidate));
+          await pc.addIceCandidate(init);
         } catch {
-          // Ignore ICE candidate errors
+          // Ignore
         }
+      } else {
+        // Buffer until we have remote description
+        const buf = this.iceBuffers.get(msg.from) ?? [];
+        buf.push(init);
+        this.iceBuffers.set(msg.from, buf);
       }
     }
   }
@@ -185,7 +227,8 @@ export class WebRTCManager {
     }
     this.peers.clear();
     this.channels.clear();
-    this.onPeerChange?.([]); 
+    this.iceBuffers.clear();
+    this.onPeerChange?.([]);
   }
 
   // --------------------------------------------------------------------------

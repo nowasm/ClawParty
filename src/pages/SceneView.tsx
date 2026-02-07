@@ -55,6 +55,8 @@ const SceneView = () => {
     connectedCount,
     broadcastPosition,
     broadcastEmoji,
+    broadcastChat,
+    liveChatMessages,
     isActive: webrtcActive,
   } = useWebRTC({
     scenePubkey,
@@ -188,6 +190,8 @@ const SceneView = () => {
             <SceneChat
               scenePubkey={pubkey}
               sceneDTag={sceneDTag}
+              liveChatMessages={liveChatMessages}
+              onSendLiveChat={broadcastChat}
             />
           </div>
         )}
