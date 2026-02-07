@@ -17,9 +17,10 @@ import { useAvatars } from '@/hooks/useAvatar';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAvatar } from '@/hooks/useAvatar';
 import { useWebRTC } from '@/hooks/useWebRTC';
+import { useSceneChat } from '@/hooks/useSceneChat';
 import NotFound from './NotFound';
 import { AVATAR_PRESETS, SCENE_D_TAG, type AvatarConfig } from '@/lib/scene';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useEffect, useRef, useState } from 'react';
 
 const SceneView = () => {
   const { npub } = useParams<{ npub: string }>();
@@ -56,7 +57,9 @@ const SceneView = () => {
     broadcastPosition,
     broadcastEmoji,
     broadcastChat,
+    sendPrivateChat,
     liveChatMessages,
+    privateChatMessages,
     isActive: webrtcActive,
   } = useWebRTC({
     scenePubkey,
@@ -64,9 +67,66 @@ const SceneView = () => {
     enabled: !!user && !!pubkey,
   });
 
+  const { data: sceneChatMessages = [] } = useSceneChat(scenePubkey, sceneDTag);
+  const mergedPublicMessages = useMemo(() => {
+    const nostrIds = new Set(sceneChatMessages.map((m) => m.id));
+    const liveOnly = liveChatMessages.filter((m) => !nostrIds.has(m.id));
+    return [
+      ...sceneChatMessages,
+      ...liveOnly.map((m) => ({ id: m.id, pubkey: m.pubkey, content: m.content, createdAt: m.createdAt })),
+    ].sort((a, b) => a.createdAt - b.createdAt);
+  }, [sceneChatMessages, liveChatMessages]);
+
+  type SpeechBubbleItem = { text: string; expiresAt: number };
+  const [speechBubbles, setSpeechBubbles] = useState<Record<string, SpeechBubbleItem[]>>({});
+  const seenMessageIds = useRef<Set<string>>(new Set());
+  const BUBBLE_DURATION_MS = 3000;
+  const cleanupInterval = useRef<ReturnType<typeof setInterval>>();
+
+  useEffect(() => {
+    const now = Date.now();
+    mergedPublicMessages.forEach((msg) => {
+      if (seenMessageIds.current.has(msg.id)) return;
+      seenMessageIds.current.add(msg.id);
+      const msgTime = msg.createdAt * 1000;
+      if (msgTime < now - BUBBLE_DURATION_MS) return;
+      const expiresAt = msgTime + BUBBLE_DURATION_MS;
+      setSpeechBubbles((prev) => {
+        const list = prev[msg.pubkey] ?? [];
+        return { ...prev, [msg.pubkey]: [...list, { text: msg.content, expiresAt }] };
+      });
+    });
+  }, [mergedPublicMessages]);
+
+  useEffect(() => {
+    cleanupInterval.current = setInterval(() => {
+      const now = Date.now();
+      setSpeechBubbles((prev) => {
+        let changed = false;
+        const next: Record<string, SpeechBubbleItem[]> = {};
+        for (const [pk, list] of Object.entries(prev)) {
+          const kept = list.filter((b) => b.expiresAt > now);
+          if (kept.length !== list.length) changed = true;
+          if (kept.length) next[pk] = kept;
+        }
+        return changed ? next : prev;
+      });
+    }, 400);
+    return () => {
+      if (cleanupInterval.current) clearInterval(cleanupInterval.current);
+    };
+  }, []);
+
   // Fetch avatar configs for all remote peers
   const remotePubkeys = useMemo(() => Object.keys(peerStates), [peerStates]);
   const { data: remoteAvatarConfigs = {} } = useAvatars(remotePubkeys);
+
+  const connectedPeers = useMemo(() => {
+    return remotePubkeys.map((pk) => ({
+      pubkey: pk,
+      displayName: remoteAvatarConfigs[pk]?.displayName ?? pk.slice(0, 12) + '…',
+    }));
+  }, [remotePubkeys, remoteAvatarConfigs]);
 
   // Build full remote avatars map (with fallbacks)
   const remoteAvatars = useMemo(() => {
@@ -172,6 +232,7 @@ const SceneView = () => {
           remoteAvatars={remoteAvatars}
           peerStates={peerStates}
           onPositionUpdate={broadcastPosition}
+          speechBubbles={speechBubbles}
           className="absolute inset-0 rounded-none border-0"
         />
 
@@ -192,6 +253,9 @@ const SceneView = () => {
               sceneDTag={sceneDTag}
               liveChatMessages={liveChatMessages}
               onSendLiveChat={broadcastChat}
+              connectedPeers={connectedPeers}
+              privateChatMessages={privateChatMessages}
+              onSendPrivateChat={sendPrivateChat}
             />
           </div>
         )}

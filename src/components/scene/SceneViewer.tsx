@@ -1,4 +1,4 @@
-import { Suspense, useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import { Suspense, useRef, useEffect, useCallback, useState, useMemo, createContext, useContext } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Environment, useGLTF, Html, Sky } from '@react-three/drei';
 import * as THREE from 'three';
@@ -25,6 +25,12 @@ const PITCH_MAX = Math.PI / 3;  // look up limit (~60deg)
 // Types
 // ============================================================================
 
+/** Single speech bubble (public chat) above avatar */
+export interface SpeechBubbleItem {
+  text: string;
+  expiresAt: number;
+}
+
 interface SceneViewerProps {
   sceneUrl?: string;
   /** Current user's avatar config */
@@ -35,6 +41,8 @@ interface SceneViewerProps {
   remoteAvatars?: Record<string, AvatarConfig>;
   /** Map of remote peer pubkeys -> their synced state (position, emoji) */
   peerStates?: Record<string, PeerState>;
+  /** Per-pubkey list of speech bubbles (public chat), shown above avatar for 3s */
+  speechBubbles?: Record<string, SpeechBubbleItem[]>;
   /** Callback to broadcast local player position */
   onPositionUpdate?: (pos: PeerPosition) => void;
   /** Callback to broadcast emoji */
@@ -182,9 +190,14 @@ function GLTFScene({ url }: { url: string }) {
 interface LocalPlayerProps {
   avatar?: AvatarConfig;
   onPositionUpdate?: (pos: PeerPosition) => void;
+  /** Speech bubbles for public chat (stacked above name) */
+  speechBubbles?: SpeechBubbleItem[];
 }
 
-function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
+const BUBBLE_OFFSET_Y = 0.5;
+const BUBBLE_MAX_WIDTH = 140;
+
+function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [] }: LocalPlayerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { camera, gl } = useThree();
   const keysRef = useRef<Set<string>>(new Set());
@@ -336,6 +349,9 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     }
   });
 
+  const now = Date.now();
+  const activeBubbles = speechBubbles.filter((b) => b.expiresAt > now);
+
   return (
     <group ref={groupRef}>
       <AvatarModel preset={preset} color={color} isCurrentUser />
@@ -345,6 +361,22 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
           {avatar?.displayName || 'You'}
         </div>
       </Html>
+      {/* Speech bubbles (stacked, no overlap) */}
+      {activeBubbles.map((bubble, i) => (
+        <Html
+          key={`${bubble.expiresAt}-${i}`}
+          position={[0, 2.4 + (i + 1) * BUBBLE_OFFSET_Y, 0]}
+          center
+          distanceFactor={8}
+        >
+          <div
+            className="rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-lg bg-card border border-border text-foreground animate-in fade-in duration-200"
+            style={{ maxWidth: BUBBLE_MAX_WIDTH }}
+          >
+            <span className="line-clamp-2 break-words">{bubble.text}</span>
+          </div>
+        </Html>
+      ))}
     </group>
   );
 }
@@ -357,9 +389,10 @@ interface RemotePlayerProps {
   pubkey: string;
   avatar: AvatarConfig;
   peerState: PeerState;
+  speechBubbles?: SpeechBubbleItem[];
 }
 
-function RemotePlayer({ pubkey, avatar, peerState }: RemotePlayerProps) {
+function RemotePlayer({ pubkey, avatar, peerState, speechBubbles = [] }: RemotePlayerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const targetPos = useRef(new THREE.Vector3());
   const targetRot = useRef(0);
@@ -382,6 +415,10 @@ function RemotePlayer({ pubkey, avatar, peerState }: RemotePlayerProps) {
     groupRef.current.rotation.y += diff * 0.15;
   });
 
+  const now = Date.now();
+  const activeBubbles = speechBubbles.filter((b) => b.expiresAt > now);
+  const emojiY = 3.0 + activeBubbles.length * BUBBLE_OFFSET_Y;
+
   return (
     <group ref={groupRef}>
       <AvatarModel preset={preset} color={avatar.color} />
@@ -391,9 +428,25 @@ function RemotePlayer({ pubkey, avatar, peerState }: RemotePlayerProps) {
           {avatar.displayName || pubkey.slice(0, 8)}
         </div>
       </Html>
-      {/* Emoji bubble */}
+      {/* Speech bubbles (stacked, no overlap) */}
+      {activeBubbles.map((bubble, i) => (
+        <Html
+          key={`${bubble.expiresAt}-${i}`}
+          position={[0, 2.4 + (i + 1) * BUBBLE_OFFSET_Y, 0]}
+          center
+          distanceFactor={8}
+        >
+          <div
+            className="rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-lg bg-card border border-border text-foreground animate-in fade-in duration-200"
+            style={{ maxWidth: BUBBLE_MAX_WIDTH }}
+          >
+            <span className="line-clamp-2 break-words">{bubble.text}</span>
+          </div>
+        </Html>
+      ))}
+      {/* Emoji bubble (above speech bubbles) */}
       {peerState.emoji && (
-        <Html position={[0, 3.0, 0]} center distanceFactor={8}>
+        <Html position={[0, emojiY, 0]} center distanceFactor={8}>
           <div className="text-3xl animate-bounce" style={{ animationDuration: '0.6s' }}>
             {peerState.emoji}
           </div>
@@ -401,6 +454,36 @@ function RemotePlayer({ pubkey, avatar, peerState }: RemotePlayerProps) {
       )}
     </group>
   );
+}
+
+// ============================================================================
+// WebGL Context Lost / Restored (avoids "THREE.WebGLRenderer: Context Lost" spam)
+// ============================================================================
+
+const SceneContextLostContext = createContext<((lost: boolean) => void) | null>(null);
+
+function WebGLContextHandler() {
+  const { gl } = useThree();
+  const setContextLost = useContext(SceneContextLostContext);
+
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const onLost = (e: Event) => {
+      e.preventDefault();
+      setContextLost?.(true);
+    };
+    const onRestored = () => {
+      setContextLost?.(false);
+    };
+    canvas.addEventListener('webglcontextlost', onLost);
+    canvas.addEventListener('webglcontextrestored', onRestored);
+    return () => {
+      canvas.removeEventListener('webglcontextlost', onLost);
+      canvas.removeEventListener('webglcontextrestored', onRestored);
+    };
+  }, [gl, setContextLost]);
+
+  return null;
 }
 
 // ============================================================================
@@ -428,9 +511,12 @@ export function SceneViewer({
   currentUserPubkey,
   remoteAvatars = {},
   peerStates = {},
+  speechBubbles = {},
   onPositionUpdate,
   className,
 }: SceneViewerProps) {
+  // WebGL context lost (e.g. tab backgrounded, GPU reset)
+  const [contextLost, setContextLost] = useState(false);
   // Local emoji state
   const [_myEmoji, setMyEmoji] = useState<string | null>(null);
   const emojiTimeout = useRef<ReturnType<typeof setTimeout>>();
@@ -455,18 +541,20 @@ export function SceneViewer({
   const theme = useMemo(() => getTheme(isPreset ? (sceneUrl ?? '') : ''), [sceneUrl, isPreset]);
 
   return (
-    <div className={`w-full h-full min-h-[400px] rounded-xl overflow-hidden bg-muted/30 border border-border ${className ?? ''}`}>
-      <Canvas
-        shadows
-        camera={{ position: [0, CAMERA_HEIGHT, CAMERA_DISTANCE], fov: 55 }}
-        gl={{ antialias: true }}
-        onPointerDown={(e) => {
-          // Focus canvas for keyboard input
-          (e.target as HTMLCanvasElement).focus?.();
-        }}
-        tabIndex={0}
-      >
-        <Suspense fallback={<SceneLoader />}>
+    <div className={`w-full h-full min-h-[400px] rounded-xl overflow-hidden bg-muted/30 border border-border relative ${className ?? ''}`}>
+      <SceneContextLostContext.Provider value={setContextLost}>
+        <Canvas
+          shadows
+          camera={{ position: [0, CAMERA_HEIGHT, CAMERA_DISTANCE], fov: 55 }}
+          gl={{ antialias: true }}
+          onPointerDown={(e) => {
+            // Focus canvas for keyboard input
+            (e.target as HTMLCanvasElement).focus?.();
+          }}
+          tabIndex={0}
+        >
+          <WebGLContextHandler />
+          <Suspense fallback={<SceneLoader />}>
           {/* Lighting */}
           <ambientLight intensity={0.4} />
           <directionalLight
@@ -505,6 +593,7 @@ export function SceneViewer({
             <LocalPlayer
               avatar={myAvatar}
               onPositionUpdate={onPositionUpdate}
+              speechBubbles={speechBubbles[currentUserPubkey]}
             />
           )}
 
@@ -522,6 +611,7 @@ export function SceneViewer({
                 pubkey={pubkey}
                 avatar={avatar}
                 peerState={state}
+                speechBubbles={speechBubbles[pubkey]}
               />
             );
           })}
@@ -532,7 +622,18 @@ export function SceneViewer({
           {/* Fog for depth — theme aware */}
           <fog attach="fog" args={[theme.fogColor, 60, 120]} />
         </Suspense>
-      </Canvas>
+        </Canvas>
+      </SceneContextLostContext.Provider>
+
+      {/* WebGL context lost overlay */}
+      {contextLost && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/90 backdrop-blur-sm rounded-xl">
+          <div className="text-center text-muted-foreground text-sm px-4">
+            <p className="font-medium">图形上下文已断开</p>
+            <p className="mt-1">正在尝试恢复…若无法恢复请刷新页面。</p>
+          </div>
+        </div>
+      )}
 
       {/* Controls hint overlay */}
       <div className="absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/70 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none select-none space-y-0.5">

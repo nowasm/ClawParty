@@ -34,6 +34,7 @@ export interface PeerState {
 export type DataChannelMessage =
   | { type: 'position'; x: number; y: number; z: number; ry: number }
   | { type: 'chat'; text: string }
+  | { type: 'dm'; to: string; text: string }
   | { type: 'emoji'; emoji: string }
   | { type: 'join'; pubkey: string }
   | { type: 'leave'; pubkey: string };
@@ -44,13 +45,19 @@ export type SignalMessage =
   | { type: 'ice'; candidate: string; from: string; to: string; sceneId: string };
 
 // ============================================================================
-// ICE Servers (free public STUN/TURN)
+// ICE Servers (STUN + TURN for NAT traversal)
 // ============================================================================
 
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
+  // TURN relay when direct/STUN fails (e.g. symmetric NAT); Open Relay Project
+  {
+    urls: ['turn:openrelay.metered.ca:443', 'turns:openrelay.metered.ca:443'],
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
 ];
 
 // ============================================================================
@@ -71,6 +78,8 @@ export class WebRTCManager {
   public onMessage?: (from: string, msg: DataChannelMessage) => void;
   /** Called when a peer connects or disconnects */
   public onPeerChange?: (connectedPeers: string[]) => void;
+  /** Optional debug log (e.g. connection state, channel open) */
+  public onDebug?: (msg: string) => void;
 
   constructor(myPubkey: string, sceneId: string) {
     this.myPubkey = myPubkey;
@@ -254,14 +263,24 @@ export class WebRTCManager {
 
     // Connection state
     pc.onconnectionstatechange = () => {
+      this.onDebug?.(`peer ${remotePubkey.slice(0, 8)}… state=${pc.connectionState}`);
       if (pc.connectionState === 'connected') {
         this.onPeerChange?.(this.getConnectedPeers());
       } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        this.channels.delete(remotePubkey);
-        this.peers.delete(remotePubkey);
-        pc.close();
-        this.onPeerChange?.(this.getConnectedPeers());
+        // Delay cleanup so a late-arriving answer (over Nostr) can still be applied
+        const delay = pc.connectionState === 'failed' ? 4000 : 0;
+        setTimeout(() => {
+          if (this.peers.get(remotePubkey)?.connectionState !== 'connected') {
+            this.channels.delete(remotePubkey);
+            this.peers.delete(remotePubkey);
+            pc.close();
+            this.onPeerChange?.(this.getConnectedPeers());
+          }
+        }, delay);
       }
+    };
+    pc.oniceconnectionstatechange = () => {
+      this.onDebug?.(`peer ${remotePubkey.slice(0, 8)}… ice=${pc.iceConnectionState}`);
     };
 
     // Incoming data channel (answerer receives it)
@@ -276,6 +295,7 @@ export class WebRTCManager {
     this.channels.set(remotePubkey, channel);
 
     channel.onopen = () => {
+      this.onDebug?.(`data channel open with ${remotePubkey.slice(0, 8)}…`);
       // Announce ourselves
       this.sendTo(remotePubkey, { type: 'join', pubkey: this.myPubkey });
       this.onPeerChange?.(this.getConnectedPeers());

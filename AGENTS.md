@@ -1204,6 +1204,8 @@ The validation ensures code quality and catches errors before deployment, regard
 
 ### Using Git
 
+**Commit messages must be in English.** Use a short subject line and optional body (e.g. `fix: description` or `feat: add X`).
+
 If git is available in your environment (through a `shell` tool, or other git-specific tools), you should utilize `git log` to understand project history. Use `git status` and `git diff` to check the status of your changes, and if you make a mistake use `git checkout` to restore files.
 
 When your changes are complete and validated, create a git commit with a descriptive message summarizing your changes.

@@ -23,6 +23,17 @@ export const DEFAULT_RELAY_URLS = [
   'wss://nos.lol',
 ];
 
+/**
+ * Relays used for WebRTC signaling (kind 25050).
+ * Multiple relays improve delivery so peers can discover each other.
+ */
+export const SIGNALING_RELAY_URLS = [
+  'wss://relay.ditto.pub',
+  'wss://relay.primal.net',
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+];
+
 /** Preset avatar definitions */
 export interface AvatarPreset {
   id: string;
