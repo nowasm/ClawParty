@@ -39,34 +39,98 @@ export interface AvatarPreset {
   id: string;
   name: string;
   color: string;
-  shape: 'capsule' | 'cube' | 'sphere' | 'cylinder';
+  shape: 'capsule' | 'cube' | 'sphere' | 'cylinder' | 'villager';
   /** Short description for the selection UI */
   desc: string;
 }
 
 export const AVATAR_PRESETS: AvatarPreset[] = [
-  // Classic (capsule) characters
-  { id: 'capsule-blue', name: 'Explorer', color: '#3B82F6', shape: 'capsule', desc: 'A brave adventurer' },
-  { id: 'capsule-red', name: 'Warrior', color: '#EF4444', shape: 'capsule', desc: 'A fierce fighter' },
-  { id: 'capsule-green', name: 'Scout', color: '#22C55E', shape: 'capsule', desc: 'A nimble pathfinder' },
-  { id: 'capsule-purple', name: 'Mystic', color: '#A855F7', shape: 'capsule', desc: 'A magical sorcerer' },
-  { id: 'capsule-orange', name: 'Pioneer', color: '#F97316', shape: 'capsule', desc: 'A daring builder' },
-  // Robot (cube) characters
-  { id: 'cube-cyan', name: 'Cyber Bot', color: '#06B6D4', shape: 'cube', desc: 'A high-tech android' },
-  { id: 'cube-steel', name: 'Iron Guard', color: '#64748B', shape: 'cube', desc: 'A steel sentinel' },
-  { id: 'cube-gold', name: 'Gilded Mech', color: '#EAB308', shape: 'cube', desc: 'A golden automaton' },
-  // Slime (sphere) characters
-  { id: 'sphere-pink', name: 'Pink Slime', color: '#EC4899', shape: 'sphere', desc: 'A bouncy jelly blob' },
-  { id: 'sphere-lime', name: 'Lime Slime', color: '#84CC16', shape: 'sphere', desc: 'A squishy friend' },
-  // Knight (cylinder) characters
-  { id: 'cylinder-silver', name: 'Silver Knight', color: '#94A3B8', shape: 'cylinder', desc: 'A noble guardian' },
-  { id: 'cylinder-crimson', name: 'Dark Knight', color: '#991B1B', shape: 'cylinder', desc: 'A shadowy protector' },
+  { id: 'ac-blue', name: 'Cool', color: '#3B82F6', shape: 'villager', desc: 'A cool blue outfit' },
+  { id: 'ac-red', name: 'Sporty', color: '#EF4444', shape: 'villager', desc: 'An energetic red look' },
+  { id: 'ac-green', name: 'Forest', color: '#22C55E', shape: 'villager', desc: 'A nature-inspired outfit' },
+  { id: 'ac-purple', name: 'Mystic', color: '#A855F7', shape: 'villager', desc: 'A magical purple outfit' },
+  { id: 'ac-orange', name: 'Sunny', color: '#F97316', shape: 'villager', desc: 'A warm sunny look' },
+  { id: 'ac-pink', name: 'Sweet', color: '#EC4899', shape: 'villager', desc: 'A sweet pink style' },
+  { id: 'ac-cyan', name: 'Ocean', color: '#06B6D4', shape: 'villager', desc: 'A refreshing ocean vibe' },
+  { id: 'ac-gold', name: 'Royal', color: '#EAB308', shape: 'villager', desc: 'A royal golden look' },
+  { id: 'ac-gray', name: 'Urban', color: '#64748B', shape: 'villager', desc: 'A sleek urban style' },
+  { id: 'ac-indigo', name: 'Night', color: '#6366F1', shape: 'villager', desc: 'A night sky inspired' },
+  { id: 'ac-rose', name: 'Rose', color: '#F43F5E', shape: 'villager', desc: 'A beautiful rose tone' },
+  { id: 'ac-teal', name: 'Mint', color: '#14B8A6', shape: 'villager', desc: 'A refreshing mint look' },
 ];
+
+// ============================================================================
+// Hair System
+// ============================================================================
+
+export interface HairStyleDef {
+  id: string;
+  name: string;
+  icon: string;
+}
+
+export const HAIR_STYLES: HairStyleDef[] = [
+  { id: 'none', name: 'None', icon: '🚫' },
+  { id: 'short', name: 'Short', icon: '✂️' },
+  { id: 'messy', name: 'Messy', icon: '🌊' },
+  { id: 'bob', name: 'Bob', icon: '💇' },
+  { id: 'long', name: 'Long', icon: '👸' },
+  { id: 'ponytail', name: 'Ponytail', icon: '🎀' },
+  { id: 'spiky', name: 'Spiky', icon: '⚡' },
+  { id: 'curly', name: 'Curly', icon: '🍥' },
+  { id: 'bun', name: 'Bun', icon: '🍡' },
+];
+
+export const HAIR_COLORS: string[] = [
+  '#1a1a2e', // Black
+  '#3d2914', // Dark Brown
+  '#6b3a1f', // Brown
+  '#8b5e34', // Light Brown
+  '#c98a4b', // Sandy
+  '#e6c170', // Blonde
+  '#f5deb3', // Platinum Blonde
+  '#d4443a', // Red
+  '#ff6b6b', // Pink
+  '#4a90d9', // Blue
+  '#7c4dff', // Purple
+  '#2e7d32', // Green
+  '#ff8a00', // Orange
+  '#e0e0e0', // Silver/White
+];
+
+// ============================================================================
+// Emoji → Action/Expression Mapping
+// ============================================================================
+
+export type ExpressionType = 'normal' | 'happy' | 'surprised' | 'laugh' | 'love';
+export type ActionType = 'wave' | 'clap' | 'jump' | 'dance' | 'spin' | 'celebrate' | 'thumbsup' | 'laughAnim';
+
+export interface EmojiAction {
+  action: ActionType;
+  expression: ExpressionType;
+}
+
+export const EMOJI_ACTIONS: Record<string, EmojiAction> = {
+  '👋': { action: 'wave', expression: 'happy' },
+  '❤️': { action: 'dance', expression: 'love' },
+  '🔥': { action: 'dance', expression: 'happy' },
+  '😂': { action: 'laughAnim', expression: 'laugh' },
+  '🤩': { action: 'spin', expression: 'happy' },
+  '👏': { action: 'clap', expression: 'happy' },
+  '💯': { action: 'celebrate', expression: 'happy' },
+  '🎉': { action: 'celebrate', expression: 'happy' },
+  '✨': { action: 'spin', expression: 'happy' },
+  '🚀': { action: 'jump', expression: 'surprised' },
+  '👍': { action: 'thumbsup', expression: 'happy' },
+  '😍': { action: 'dance', expression: 'love' },
+};
 
 /** Avatar configuration stored in kind 30078 content */
 export interface AvatarConfig {
   model: string;
   color: string;
+  hairStyle: string;
+  hairColor: string;
   displayName: string;
 }
 
@@ -111,12 +175,16 @@ export function parseAvatarConfig(content: string): AvatarConfig {
     return {
       model: parsed.model || AVATAR_PRESETS[0].id,
       color: parsed.color || AVATAR_PRESETS[0].color,
+      hairStyle: parsed.hairStyle || 'short',
+      hairColor: parsed.hairColor || '#3d2914',
       displayName: parsed.displayName || '',
     };
   } catch {
     return {
       model: AVATAR_PRESETS[0].id,
       color: AVATAR_PRESETS[0].color,
+      hairStyle: 'short',
+      hairColor: '#3d2914',
       displayName: '',
     };
   }

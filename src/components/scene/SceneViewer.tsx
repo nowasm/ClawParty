@@ -192,12 +192,14 @@ interface LocalPlayerProps {
   onPositionUpdate?: (pos: PeerPosition) => void;
   /** Speech bubbles for public chat (stacked above name) */
   speechBubbles?: SpeechBubbleItem[];
+  /** Active emoji for triggering avatar action animation */
+  emoji?: string | null;
 }
 
 const BUBBLE_OFFSET_Y = 0.5;
 const BUBBLE_MAX_WIDTH = 140;
 
-function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [] }: LocalPlayerProps) {
+function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji }: LocalPlayerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { camera, gl } = useThree();
   const keysRef = useRef<Set<string>>(new Set());
@@ -354,7 +356,14 @@ function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [] }: LocalPlay
 
   return (
     <group ref={groupRef}>
-      <AvatarModel preset={preset} color={color} isCurrentUser />
+      <AvatarModel
+        preset={preset}
+        color={color}
+        hairStyle={avatar?.hairStyle}
+        hairColor={avatar?.hairColor}
+        isCurrentUser
+        emoji={emoji}
+      />
       {/* Name label */}
       <Html position={[0, 2.4, 0]} center distanceFactor={10}>
         <div className="whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium shadow-lg bg-primary text-primary-foreground">
@@ -377,6 +386,14 @@ function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [] }: LocalPlay
           </div>
         </Html>
       ))}
+      {/* Emoji bubble above local player */}
+      {emoji && (
+        <Html position={[0, 3.0 + activeBubbles.length * BUBBLE_OFFSET_Y, 0]} center distanceFactor={8}>
+          <div className="text-3xl animate-bounce" style={{ animationDuration: '0.6s' }}>
+            {emoji}
+          </div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -421,7 +438,13 @@ function RemotePlayer({ pubkey, avatar, peerState, speechBubbles = [] }: RemoteP
 
   return (
     <group ref={groupRef}>
-      <AvatarModel preset={preset} color={avatar.color} />
+      <AvatarModel
+        preset={preset}
+        color={avatar.color}
+        hairStyle={avatar.hairStyle}
+        hairColor={avatar.hairColor}
+        emoji={peerState.emoji}
+      />
       {/* Name label */}
       <Html position={[0, 2.4, 0]} center distanceFactor={10}>
         <div className="whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium shadow-lg bg-card text-card-foreground border border-border">
@@ -594,6 +617,7 @@ export function SceneViewer({
               avatar={myAvatar}
               onPositionUpdate={onPositionUpdate}
               speechBubbles={speechBubbles[currentUserPubkey]}
+              emoji={_myEmoji}
             />
           )}
 
@@ -603,6 +627,8 @@ export function SceneViewer({
             const avatar = remoteAvatars[pubkey] ?? {
               model: AVATAR_PRESETS[0].id,
               color: AVATAR_PRESETS[0].color,
+              hairStyle: 'short',
+              hairColor: '#3d2914',
               displayName: pubkey.slice(0, 8),
             };
             return (

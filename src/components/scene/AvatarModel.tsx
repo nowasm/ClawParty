@@ -1,89 +1,750 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { AvatarPreset } from '@/lib/scene';
+import {
+  type AvatarPreset,
+  type ExpressionType,
+  type ActionType,
+  EMOJI_ACTIONS,
+} from '@/lib/scene';
+
+// ======================================================================
+// Constants
+// ======================================================================
+
+const SKIN_COLOR = '#FFE0BD';
+const CHEEK_COLOR = '#FFB5B5';
+const EYE_COLOR = '#2D1B14';
+const MOUTH_COLOR = '#C47A6C';
+
+const HEAD_Y = 1.30;
+const HEAD_R = 0.38;
+const FACE_Z = HEAD_R + 0.01;
+
+const BODY_Y = 0.72;
+const ARM_PIVOT_Y = 0.95;
+const ARM_X = 0.30;
+const LEG_PIVOT_Y = 0.48;
+const LEG_X = 0.13;
+
+const ACTION_DURATION = 2.5;
+
+// ======================================================================
+// Types
+// ======================================================================
 
 interface AvatarModelProps {
   preset: AvatarPreset;
   color: string;
+  hairStyle?: string;
+  hairColor?: string;
   isCurrentUser?: boolean;
-  /** Enable idle animation (breathing, arm swing) */
+  /** Enable idle animation */
   animate?: boolean;
+  /** Active emoji triggers action animation + expression change */
+  emoji?: string | null;
 }
 
-/** Darken a hex color by a factor (0–1). */
+// ======================================================================
+// Color Utilities
+// ======================================================================
+
 function darken(hex: string, factor: number): string {
   const c = new THREE.Color(hex);
   c.multiplyScalar(1 - factor);
   return `#${c.getHexString()}`;
 }
 
-/** Lighten a hex color by a factor (0–1). */
 function lighten(hex: string, factor: number): string {
   const c = new THREE.Color(hex);
   c.lerp(new THREE.Color('#ffffff'), factor);
   return `#${c.getHexString()}`;
 }
 
-/**
- * Minecraft-inspired 3D avatar using box geometry.
- * All characters share the same blocky skeleton with unique proportions per shape type.
- */
-export function AvatarModel({ preset, color, isCurrentUser = false, animate = true }: AvatarModelProps) {
+// ======================================================================
+// Easing
+// ======================================================================
+
+function easeInOutQuad(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+// ======================================================================
+// Face Expression Component
+// ======================================================================
+
+function FaceExpression({ expression }: { expression: ExpressionType }) {
+  return (
+    <group position={[0, 0, FACE_Z]}>
+      {/* ---- EYES ---- */}
+
+      {/* Normal / Surprised: round dot eyes */}
+      {(expression === 'normal' || expression === 'surprised') && (
+        <>
+          <mesh position={[-0.11, 0.05, 0]}>
+            <circleGeometry args={[expression === 'surprised' ? 0.055 : 0.04, 16]} />
+            <meshBasicMaterial color={EYE_COLOR} />
+          </mesh>
+          <mesh position={[0.11, 0.05, 0]}>
+            <circleGeometry args={[expression === 'surprised' ? 0.055 : 0.04, 16]} />
+            <meshBasicMaterial color={EYE_COLOR} />
+          </mesh>
+          {/* Sparkle highlights */}
+          <mesh position={[-0.09, 0.07, 0.001]}>
+            <circleGeometry args={[0.014, 8]} />
+            <meshBasicMaterial color="#ffffff" />
+          </mesh>
+          <mesh position={[0.13, 0.07, 0.001]}>
+            <circleGeometry args={[0.014, 8]} />
+            <meshBasicMaterial color="#ffffff" />
+          </mesh>
+        </>
+      )}
+
+      {/* Happy / Love: curved ^_^ eyes */}
+      {(expression === 'happy' || expression === 'love') && (
+        <>
+          {/* Left eye ^ shape */}
+          <mesh position={[-0.13, 0.055, 0]} rotation={[0, 0, 0.5]}>
+            <boxGeometry args={[0.055, 0.016, 0.004]} />
+            <meshBasicMaterial color={expression === 'love' ? '#e8457a' : EYE_COLOR} />
+          </mesh>
+          <mesh position={[-0.09, 0.055, 0]} rotation={[0, 0, -0.5]}>
+            <boxGeometry args={[0.055, 0.016, 0.004]} />
+            <meshBasicMaterial color={expression === 'love' ? '#e8457a' : EYE_COLOR} />
+          </mesh>
+          {/* Right eye ^ shape */}
+          <mesh position={[0.09, 0.055, 0]} rotation={[0, 0, 0.5]}>
+            <boxGeometry args={[0.055, 0.016, 0.004]} />
+            <meshBasicMaterial color={expression === 'love' ? '#e8457a' : EYE_COLOR} />
+          </mesh>
+          <mesh position={[0.13, 0.055, 0]} rotation={[0, 0, -0.5]}>
+            <boxGeometry args={[0.055, 0.016, 0.004]} />
+            <meshBasicMaterial color={expression === 'love' ? '#e8457a' : EYE_COLOR} />
+          </mesh>
+        </>
+      )}
+
+      {/* Laugh: squinted horizontal line eyes */}
+      {expression === 'laugh' && (
+        <>
+          <mesh position={[-0.11, 0.05, 0]}>
+            <boxGeometry args={[0.08, 0.018, 0.004]} />
+            <meshBasicMaterial color={EYE_COLOR} />
+          </mesh>
+          <mesh position={[0.11, 0.05, 0]}>
+            <boxGeometry args={[0.08, 0.018, 0.004]} />
+            <meshBasicMaterial color={EYE_COLOR} />
+          </mesh>
+        </>
+      )}
+
+      {/* ---- NOSE ---- */}
+      <mesh position={[0, -0.02, 0]}>
+        <circleGeometry args={[0.014, 8]} />
+        <meshBasicMaterial color={darken(SKIN_COLOR, 0.15)} />
+      </mesh>
+
+      {/* ---- MOUTH ---- */}
+
+      {/* Normal: small content line */}
+      {expression === 'normal' && (
+        <mesh position={[0, -0.09, 0]}>
+          <boxGeometry args={[0.055, 0.014, 0.004]} />
+          <meshBasicMaterial color={MOUTH_COLOR} />
+        </mesh>
+      )}
+
+      {/* Happy / Love: curved smile */}
+      {(expression === 'happy' || expression === 'love') && (
+        <mesh position={[0, -0.085, 0]} rotation={[0, 0, Math.PI]}>
+          <torusGeometry args={[0.04, 0.008, 4, 12, Math.PI]} />
+          <meshBasicMaterial color={MOUTH_COLOR} />
+        </mesh>
+      )}
+
+      {/* Surprised: small O mouth */}
+      {expression === 'surprised' && (
+        <mesh position={[0, -0.09, 0]}>
+          <circleGeometry args={[0.025, 16]} />
+          <meshBasicMaterial color={MOUTH_COLOR} />
+        </mesh>
+      )}
+
+      {/* Laugh: wide open mouth */}
+      {expression === 'laugh' && (
+        <mesh position={[0, -0.085, 0]}>
+          <circleGeometry args={[0.04, 16]} />
+          <meshBasicMaterial color={MOUTH_COLOR} />
+        </mesh>
+      )}
+
+      {/* ---- CHEEK BLUSH ---- */}
+      <mesh position={[-0.19, -0.02, -0.01]}>
+        <circleGeometry args={[0.038, 12]} />
+        <meshBasicMaterial
+          color={CHEEK_COLOR}
+          transparent
+          opacity={expression === 'love' ? 0.7 : expression === 'happy' ? 0.5 : 0.25}
+        />
+      </mesh>
+      <mesh position={[0.19, -0.02, -0.01]}>
+        <circleGeometry args={[0.038, 12]} />
+        <meshBasicMaterial
+          color={CHEEK_COLOR}
+          transparent
+          opacity={expression === 'love' ? 0.7 : expression === 'happy' ? 0.5 : 0.25}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+// ======================================================================
+// Hair Mesh Component
+// ======================================================================
+
+function HairMesh({ style, color }: { style: string; color: string }) {
+  if (style === 'none') return null;
+
+  switch (style) {
+    case 'short':
+      return (
+        <group>
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[HEAD_R + 0.03, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.48]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Front bangs */}
+          <mesh position={[0, 0.20, HEAD_R * 0.52]} rotation={[-0.3, 0, 0]}>
+            <boxGeometry args={[0.26, 0.06, 0.07]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+        </group>
+      );
+
+    case 'messy':
+      return (
+        <group>
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[HEAD_R + 0.04, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.50]} />
+            <meshStandardMaterial color={color} roughness={0.9} />
+          </mesh>
+          {/* Tufts */}
+          <mesh position={[0.09, HEAD_R + 0.02, 0.05]}>
+            <sphereGeometry args={[0.08, 8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.9} />
+          </mesh>
+          <mesh position={[-0.10, HEAD_R + 0.04, 0.02]}>
+            <sphereGeometry args={[0.07, 8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.9} />
+          </mesh>
+          <mesh position={[0.04, HEAD_R + 0.06, -0.06]}>
+            <sphereGeometry args={[0.06, 8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.9} />
+          </mesh>
+          {/* Bangs */}
+          <mesh position={[0.06, 0.16, HEAD_R * 0.58]} rotation={[-0.4, 0.2, 0.1]}>
+            <boxGeometry args={[0.11, 0.07, 0.06]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          <mesh position={[-0.07, 0.17, HEAD_R * 0.52]} rotation={[-0.3, -0.2, -0.1]}>
+            <boxGeometry args={[0.10, 0.06, 0.06]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+        </group>
+      );
+
+    case 'bob':
+      return (
+        <group>
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[HEAD_R + 0.04, 16, 14, 0, Math.PI * 2, 0, Math.PI * 0.60]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Side hair */}
+          <mesh position={[HEAD_R * 0.78, -0.10, 0]}>
+            <capsuleGeometry args={[0.055, 0.10, 4, 8]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          <mesh position={[-HEAD_R * 0.78, -0.10, 0]}>
+            <capsuleGeometry args={[0.055, 0.10, 4, 8]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Bangs */}
+          <mesh position={[0, 0.16, HEAD_R * 0.58]} rotation={[-0.25, 0, 0]}>
+            <boxGeometry args={[0.30, 0.06, 0.06]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+        </group>
+      );
+
+    case 'long':
+      return (
+        <group>
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[HEAD_R + 0.03, 16, 14, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Long back hair */}
+          <mesh position={[0, -0.28, -HEAD_R * 0.50]}>
+            <capsuleGeometry args={[0.13, 0.32, 6, 10]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Side hair */}
+          <mesh position={[HEAD_R * 0.62, -0.18, -0.04]}>
+            <capsuleGeometry args={[0.045, 0.16, 4, 8]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          <mesh position={[-HEAD_R * 0.62, -0.18, -0.04]}>
+            <capsuleGeometry args={[0.045, 0.16, 4, 8]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Bangs */}
+          <mesh position={[0, 0.17, HEAD_R * 0.58]} rotation={[-0.25, 0, 0]}>
+            <boxGeometry args={[0.28, 0.06, 0.06]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+        </group>
+      );
+
+    case 'ponytail':
+      return (
+        <group>
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[HEAD_R + 0.03, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.48]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Ponytail */}
+          <mesh position={[0, 0.06, -HEAD_R - 0.08]} rotation={[0.5, 0, 0]}>
+            <capsuleGeometry args={[0.055, 0.22, 4, 8]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Hair tie */}
+          <mesh position={[0, 0.10, -HEAD_R - 0.02]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.045, 0.014, 8, 12]} />
+            <meshStandardMaterial color={darken(color, 0.3)} roughness={0.6} />
+          </mesh>
+          {/* Bangs */}
+          <mesh position={[0, 0.19, HEAD_R * 0.52]} rotation={[-0.3, 0, 0]}>
+            <boxGeometry args={[0.24, 0.06, 0.06]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+        </group>
+      );
+
+    case 'spiky':
+      return (
+        <group>
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[HEAD_R + 0.02, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.42]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Spikes */}
+          {([
+            { pos: [0, 0.36, 0] as [number, number, number], rot: [0, 0, 0] as [number, number, number] },
+            { pos: [0.09, 0.32, 0.06] as [number, number, number], rot: [0.2, 0, 0.35] as [number, number, number] },
+            { pos: [-0.09, 0.32, 0.06] as [number, number, number], rot: [0.2, 0, -0.35] as [number, number, number] },
+            { pos: [0, 0.30, -0.10] as [number, number, number], rot: [-0.35, 0, 0] as [number, number, number] },
+            { pos: [0.13, 0.28, -0.03] as [number, number, number], rot: [-0.1, 0, 0.55] as [number, number, number] },
+            { pos: [-0.13, 0.28, -0.03] as [number, number, number], rot: [-0.1, 0, -0.55] as [number, number, number] },
+          ]).map((spike, i) => (
+            <mesh key={i} position={spike.pos} rotation={spike.rot}>
+              <coneGeometry args={[0.035, 0.12, 6]} />
+              <meshStandardMaterial color={color} roughness={0.85} />
+            </mesh>
+          ))}
+        </group>
+      );
+
+    case 'curly':
+      return (
+        <group>
+          <mesh position={[0, 0.02, 0]}>
+            <sphereGeometry args={[HEAD_R + 0.08, 16, 14, 0, Math.PI * 2, 0, Math.PI * 0.58]} />
+            <meshStandardMaterial color={color} roughness={0.95} />
+          </mesh>
+          {/* Extra puffs */}
+          {([
+            [0.16, 0.14, 0.10],
+            [-0.16, 0.14, 0.10],
+            [0.21, 0.02, -0.04],
+            [-0.21, 0.02, -0.04],
+            [0, HEAD_R + 0.10, 0],
+            [0.10, 0.08, -0.14],
+            [-0.10, 0.08, -0.14],
+          ] as const).map((pos, i) => (
+            <mesh key={i} position={pos}>
+              <sphereGeometry args={[0.065 + Math.sin(i * 2.5) * 0.015, 8, 8]} />
+              <meshStandardMaterial color={color} roughness={0.95} />
+            </mesh>
+          ))}
+        </group>
+      );
+
+    case 'bun':
+      return (
+        <group>
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[HEAD_R + 0.03, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.46]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Bun on top */}
+          <mesh position={[0, HEAD_R + 0.06, -0.04]}>
+            <sphereGeometry args={[0.09, 12, 12]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+          {/* Bangs */}
+          <mesh position={[0, 0.19, HEAD_R * 0.52]} rotation={[-0.25, 0, 0]}>
+            <boxGeometry args={[0.26, 0.06, 0.06]} />
+            <meshStandardMaterial color={color} roughness={0.85} />
+          </mesh>
+        </group>
+      );
+
+    default:
+      return null;
+  }
+}
+
+// ======================================================================
+// Main Avatar Component (Animal Crossing Style)
+// ======================================================================
+
+export function AvatarModel({
+  color,
+  hairStyle = 'short',
+  hairColor = '#3d2914',
+  isCurrentUser = false,
+  animate = true,
+  emoji,
+}: AvatarModelProps) {
   const groupRef = useRef<THREE.Group>(null!);
+  const headRef = useRef<THREE.Group>(null!);
   const leftArmRef = useRef<THREE.Group>(null!);
   const rightArmRef = useRef<THREE.Group>(null!);
   const leftLegRef = useRef<THREE.Group>(null!);
   const rightLegRef = useRef<THREE.Group>(null!);
 
+  const [expression, setExpression] = useState<ExpressionType>('normal');
+
   const colors = useMemo(
     () => ({
       main: color,
-      dark: darken(color, 0.25),
-      darker: darken(color, 0.45),
-      light: lighten(color, 0.2),
-      accent: lighten(color, 0.4),
+      dark: darken(color, 0.20),
+      darker: darken(color, 0.35),
+      light: lighten(color, 0.15),
     }),
     [color],
   );
 
+  // Animation state (refs to avoid re-renders in the animation loop)
+  const currentAction = useRef<ActionType | null>(null);
+  const animStart = useRef(0);
+  const pendingEmoji = useRef<string | null>(null);
+
+  // Detect emoji changes
+  useEffect(() => {
+    if (emoji) {
+      pendingEmoji.current = emoji;
+      const mapping = EMOJI_ACTIONS[emoji];
+      if (mapping) {
+        setExpression(mapping.expression);
+      }
+    }
+  }, [emoji]);
+
+  // Reset rotations to default
+  function resetPose() {
+    if (leftArmRef.current) leftArmRef.current.rotation.set(0, 0, 0);
+    if (rightArmRef.current) rightArmRef.current.rotation.set(0, 0, 0);
+    if (leftLegRef.current) leftLegRef.current.rotation.set(0, 0, 0);
+    if (rightLegRef.current) rightLegRef.current.rotation.set(0, 0, 0);
+    if (headRef.current) headRef.current.rotation.set(0, 0, 0);
+    if (groupRef.current) groupRef.current.position.y = 0;
+  }
+
   // Idle animation
+  function applyIdle(t: number) {
+    if (groupRef.current) {
+      groupRef.current.position.y = Math.sin(t * 1.5) * 0.015;
+    }
+    const armSwing = Math.sin(t * 1.2) * 0.08;
+    if (leftArmRef.current) {
+      leftArmRef.current.rotation.x = armSwing;
+      leftArmRef.current.rotation.z = 0;
+    }
+    if (rightArmRef.current) {
+      rightArmRef.current.rotation.x = -armSwing;
+      rightArmRef.current.rotation.z = 0;
+    }
+    const legSwing = Math.sin(t * 1.2) * 0.04;
+    if (leftLegRef.current) leftLegRef.current.rotation.x = -legSwing;
+    if (rightLegRef.current) rightLegRef.current.rotation.x = legSwing;
+    if (headRef.current) {
+      headRef.current.rotation.z = Math.sin(t * 0.8) * 0.03;
+      headRef.current.rotation.x = 0;
+    }
+  }
+
+  // Action animation
+  function applyAction(action: ActionType, progress: number, t: number) {
+    const eased = easeInOutQuad(Math.min(progress * 3, 1));
+    const exitFactor = progress > 0.7 ? 1 - (progress - 0.7) / 0.3 : 1;
+    const intensity = eased * exitFactor;
+
+    switch (action) {
+      case 'wave': {
+        if (rightArmRef.current) {
+          rightArmRef.current.rotation.z = -2.2 * intensity;
+          rightArmRef.current.rotation.x = Math.sin(t * 8) * 0.3 * intensity;
+        }
+        if (leftArmRef.current) {
+          leftArmRef.current.rotation.x = Math.sin(t * 1.2) * 0.05;
+          leftArmRef.current.rotation.z = 0;
+        }
+        if (headRef.current) headRef.current.rotation.z = 0.15 * intensity;
+        if (leftLegRef.current) leftLegRef.current.rotation.x = 0;
+        if (rightLegRef.current) rightLegRef.current.rotation.x = 0;
+        if (groupRef.current) groupRef.current.position.y = Math.sin(t * 3) * 0.02 * intensity;
+        break;
+      }
+      case 'clap': {
+        const clapCycle = Math.sin(t * 10) * 0.3 * intensity;
+        if (leftArmRef.current) {
+          leftArmRef.current.rotation.x = -1.2 * intensity;
+          leftArmRef.current.rotation.z = (-0.3 + clapCycle * 0.5) * intensity;
+        }
+        if (rightArmRef.current) {
+          rightArmRef.current.rotation.x = -1.2 * intensity;
+          rightArmRef.current.rotation.z = (0.3 - clapCycle * 0.5) * intensity;
+        }
+        if (groupRef.current) groupRef.current.position.y = Math.abs(Math.sin(t * 10)) * 0.04 * intensity;
+        if (headRef.current) headRef.current.rotation.set(0, 0, Math.sin(t * 5) * 0.06 * intensity);
+        if (leftLegRef.current) leftLegRef.current.rotation.x = 0;
+        if (rightLegRef.current) rightLegRef.current.rotation.x = 0;
+        break;
+      }
+      case 'jump': {
+        const jumpPhase = Math.sin(progress * Math.PI * 4);
+        const jumpH = Math.max(0, jumpPhase) * 0.4 * intensity;
+        if (groupRef.current) groupRef.current.position.y = jumpH;
+        const armUp = Math.max(0, jumpPhase) * intensity;
+        if (leftArmRef.current) {
+          leftArmRef.current.rotation.z = 2.5 * armUp;
+          leftArmRef.current.rotation.x = 0;
+        }
+        if (rightArmRef.current) {
+          rightArmRef.current.rotation.z = -2.5 * armUp;
+          rightArmRef.current.rotation.x = 0;
+        }
+        if (headRef.current) headRef.current.rotation.set(0, 0, 0);
+        if (leftLegRef.current) leftLegRef.current.rotation.x = -0.2 * armUp;
+        if (rightLegRef.current) rightLegRef.current.rotation.x = -0.2 * armUp;
+        break;
+      }
+      case 'dance': {
+        const sway = Math.sin(t * 4) * 0.15 * intensity;
+        const armDance = Math.sin(t * 4) * 1.0 * intensity;
+        if (groupRef.current) groupRef.current.position.y = Math.abs(Math.sin(t * 8)) * 0.05 * intensity;
+        if (headRef.current) headRef.current.rotation.z = sway;
+        if (leftArmRef.current) {
+          leftArmRef.current.rotation.x = armDance;
+          leftArmRef.current.rotation.z = 0.8 * intensity;
+        }
+        if (rightArmRef.current) {
+          rightArmRef.current.rotation.x = -armDance;
+          rightArmRef.current.rotation.z = -0.8 * intensity;
+        }
+        if (leftLegRef.current) leftLegRef.current.rotation.x = Math.sin(t * 4) * 0.25 * intensity;
+        if (rightLegRef.current) rightLegRef.current.rotation.x = -Math.sin(t * 4) * 0.25 * intensity;
+        break;
+      }
+      case 'spin': {
+        if (groupRef.current) groupRef.current.position.y = Math.sin(progress * Math.PI * 2) * 0.12 * intensity;
+        if (leftArmRef.current) {
+          leftArmRef.current.rotation.z = 1.5 * intensity;
+          leftArmRef.current.rotation.x = 0;
+        }
+        if (rightArmRef.current) {
+          rightArmRef.current.rotation.z = -1.5 * intensity;
+          rightArmRef.current.rotation.x = 0;
+        }
+        if (headRef.current) headRef.current.rotation.z = Math.sin(t * 3) * 0.1 * intensity;
+        if (leftLegRef.current) leftLegRef.current.rotation.x = 0;
+        if (rightLegRef.current) rightLegRef.current.rotation.x = 0;
+        break;
+      }
+      case 'celebrate': {
+        const bounce = Math.sin(progress * Math.PI * 6);
+        if (groupRef.current) groupRef.current.position.y = Math.max(0, bounce) * 0.3 * intensity;
+        if (leftArmRef.current) {
+          leftArmRef.current.rotation.z = (2.5 + Math.sin(t * 6) * 0.3) * intensity;
+          leftArmRef.current.rotation.x = Math.sin(t * 8) * 0.2 * intensity;
+        }
+        if (rightArmRef.current) {
+          rightArmRef.current.rotation.z = (-2.5 - Math.sin(t * 6) * 0.3) * intensity;
+          rightArmRef.current.rotation.x = Math.sin(t * 8 + 1) * 0.2 * intensity;
+        }
+        if (headRef.current) headRef.current.rotation.z = Math.sin(t * 5) * 0.15 * intensity;
+        if (leftLegRef.current) leftLegRef.current.rotation.x = -0.15 * intensity;
+        if (rightLegRef.current) rightLegRef.current.rotation.x = -0.15 * intensity;
+        break;
+      }
+      case 'thumbsup': {
+        if (rightArmRef.current) {
+          rightArmRef.current.rotation.x = -1.3 * intensity;
+          rightArmRef.current.rotation.z = -0.3 * intensity;
+        }
+        if (leftArmRef.current) {
+          leftArmRef.current.rotation.x = Math.sin(t * 1.2) * 0.05;
+          leftArmRef.current.rotation.z = 0;
+        }
+        if (headRef.current) {
+          headRef.current.rotation.z = 0.1 * intensity;
+          headRef.current.rotation.x = -0.1 * intensity;
+        }
+        if (groupRef.current) groupRef.current.position.y = 0;
+        if (leftLegRef.current) leftLegRef.current.rotation.x = 0;
+        if (rightLegRef.current) rightLegRef.current.rotation.x = 0;
+        break;
+      }
+      case 'laughAnim': {
+        const shake = Math.sin(t * 12) * 0.05 * intensity;
+        if (groupRef.current) groupRef.current.position.y = Math.abs(Math.sin(t * 8)) * 0.03 * intensity;
+        if (headRef.current) {
+          headRef.current.rotation.x = 0.15 * intensity;
+          headRef.current.rotation.z = shake;
+        }
+        if (leftArmRef.current) {
+          leftArmRef.current.rotation.x = -0.5 * intensity;
+          leftArmRef.current.rotation.z = -0.3 * intensity;
+        }
+        if (rightArmRef.current) {
+          rightArmRef.current.rotation.x = -0.5 * intensity;
+          rightArmRef.current.rotation.z = 0.3 * intensity;
+        }
+        if (leftLegRef.current) leftLegRef.current.rotation.x = shake;
+        if (rightLegRef.current) rightLegRef.current.rotation.x = -shake;
+        break;
+      }
+    }
+  }
+
+  // Animation loop
   useFrame((state) => {
     if (!animate) return;
     const t = state.clock.elapsedTime;
 
-    // Gentle breathing
-    if (groupRef.current) {
-      groupRef.current.position.y = Math.sin(t * 1.2) * 0.02;
+    // Pick up pending action
+    if (pendingEmoji.current) {
+      const mapping = EMOJI_ACTIONS[pendingEmoji.current];
+      if (mapping) {
+        currentAction.current = mapping.action;
+        animStart.current = t;
+      }
+      pendingEmoji.current = null;
     }
 
-    // Subtle arm/leg swing
-    const swing = Math.sin(t * 1.8) * 0.12;
-    if (leftArmRef.current) leftArmRef.current.rotation.x = swing;
-    if (rightArmRef.current) rightArmRef.current.rotation.x = -swing;
-    if (leftLegRef.current) leftLegRef.current.rotation.x = -swing * 0.6;
-    if (rightLegRef.current) rightLegRef.current.rotation.x = swing * 0.6;
+    // Action animation
+    if (currentAction.current) {
+      const elapsed = t - animStart.current;
+      if (elapsed >= ACTION_DURATION) {
+        currentAction.current = null;
+        resetPose();
+        setExpression('normal');
+      } else {
+        applyAction(currentAction.current, elapsed / ACTION_DURATION, t);
+        return;
+      }
+    }
+
+    // Idle animation
+    applyIdle(t);
   });
 
   return (
     <group ref={groupRef}>
-      {preset.shape === 'capsule' && (
-        <ClassicSkin colors={colors} refs={{ leftArmRef, rightArmRef, leftLegRef, rightLegRef }} />
-      )}
-      {preset.shape === 'cube' && (
-        <RobotSkin colors={colors} refs={{ leftArmRef, rightArmRef, leftLegRef, rightLegRef }} />
-      )}
-      {preset.shape === 'sphere' && (
-        <SlimeSkin colors={colors} refs={{ leftArmRef, rightArmRef, leftLegRef, rightLegRef }} />
-      )}
-      {preset.shape === 'cylinder' && (
-        <KnightSkin colors={colors} refs={{ leftArmRef, rightArmRef, leftLegRef, rightLegRef }} />
-      )}
+      {/* ====== HEAD ====== */}
+      <group ref={headRef} position={[0, HEAD_Y, 0]}>
+        {/* Head sphere */}
+        <mesh castShadow>
+          <sphereGeometry args={[HEAD_R, 24, 24]} />
+          <meshStandardMaterial color={SKIN_COLOR} roughness={0.85} />
+        </mesh>
+
+        {/* Face */}
+        <FaceExpression expression={expression} />
+
+        {/* Hair */}
+        <HairMesh style={hairStyle} color={hairColor} />
+      </group>
+
+      {/* ====== BODY (outfit) ====== */}
+      <mesh position={[0, BODY_Y, 0]} castShadow>
+        <capsuleGeometry args={[0.22, 0.28, 8, 16]} />
+        <meshStandardMaterial color={colors.main} roughness={0.7} />
+      </mesh>
+      {/* Belt stripe */}
+      <mesh position={[0, BODY_Y - 0.08, 0]}>
+        <cylinderGeometry args={[0.225, 0.225, 0.04, 16]} />
+        <meshStandardMaterial color={colors.dark} roughness={0.6} />
+      </mesh>
+
+      {/* ====== LEFT ARM ====== */}
+      <group ref={leftArmRef} position={[ARM_X, ARM_PIVOT_Y, 0]}>
+        <mesh position={[0, -0.15, 0]} castShadow>
+          <capsuleGeometry args={[0.075, 0.12, 4, 8]} />
+          <meshStandardMaterial color={colors.main} roughness={0.7} />
+        </mesh>
+        {/* Hand */}
+        <mesh position={[0, -0.32, 0]}>
+          <sphereGeometry args={[0.065, 8, 8]} />
+          <meshStandardMaterial color={SKIN_COLOR} roughness={0.85} />
+        </mesh>
+      </group>
+
+      {/* ====== RIGHT ARM ====== */}
+      <group ref={rightArmRef} position={[-ARM_X, ARM_PIVOT_Y, 0]}>
+        <mesh position={[0, -0.15, 0]} castShadow>
+          <capsuleGeometry args={[0.075, 0.12, 4, 8]} />
+          <meshStandardMaterial color={colors.main} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, -0.32, 0]}>
+          <sphereGeometry args={[0.065, 8, 8]} />
+          <meshStandardMaterial color={SKIN_COLOR} roughness={0.85} />
+        </mesh>
+      </group>
+
+      {/* ====== LEFT LEG ====== */}
+      <group ref={leftLegRef} position={[LEG_X, LEG_PIVOT_Y, 0]}>
+        <mesh position={[0, -0.18, 0]} castShadow>
+          <capsuleGeometry args={[0.085, 0.14, 4, 8]} />
+          <meshStandardMaterial color={colors.darker} roughness={0.7} />
+        </mesh>
+        {/* Shoe */}
+        <mesh position={[0, -0.36, 0.03]}>
+          <sphereGeometry args={[0.095, 8, 8]} />
+          <meshStandardMaterial color={colors.dark} roughness={0.6} />
+        </mesh>
+      </group>
+
+      {/* ====== RIGHT LEG ====== */}
+      <group ref={rightLegRef} position={[-LEG_X, LEG_PIVOT_Y, 0]}>
+        <mesh position={[0, -0.18, 0]} castShadow>
+          <capsuleGeometry args={[0.085, 0.14, 4, 8]} />
+          <meshStandardMaterial color={colors.darker} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, -0.36, 0.03]}>
+          <sphereGeometry args={[0.095, 8, 8]} />
+          <meshStandardMaterial color={colors.dark} roughness={0.6} />
+        </mesh>
+      </group>
 
       {/* Current user indicator (glowing ring at feet) */}
       {isCurrentUser && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-          <ringGeometry args={[0.45, 0.55, 32]} />
+          <ringGeometry args={[0.40, 0.48, 32]} />
           <meshStandardMaterial
             color={color}
             emissive={color}
@@ -93,381 +754,6 @@ export function AvatarModel({ preset, color, isCurrentUser = false, animate = tr
           />
         </mesh>
       )}
-    </group>
-  );
-}
-
-// ======================================================================
-// Refs type
-// ======================================================================
-interface SkinRefs {
-  leftArmRef: React.RefObject<THREE.Group>;
-  rightArmRef: React.RefObject<THREE.Group>;
-  leftLegRef: React.RefObject<THREE.Group>;
-  rightLegRef: React.RefObject<THREE.Group>;
-}
-
-interface SkinProps {
-  colors: { main: string; dark: string; darker: string; light: string; accent: string };
-  refs: SkinRefs;
-}
-
-// ======================================================================
-// Classic Skin (Steve-like Minecraft character)
-// ======================================================================
-function ClassicSkin({ colors, refs }: SkinProps) {
-  return (
-    <group>
-      {/* Head */}
-      <mesh position={[0, 1.55, 0]} castShadow>
-        <boxGeometry args={[0.5, 0.5, 0.5]} />
-        <meshStandardMaterial color={colors.light} roughness={0.7} />
-      </mesh>
-      {/* Face - front plate */}
-      <mesh position={[0, 1.55, 0.251]}>
-        <planeGeometry args={[0.5, 0.5]} />
-        <meshStandardMaterial color={colors.light} roughness={0.7} />
-      </mesh>
-      {/* Eyes */}
-      <mesh position={[0.1, 1.6, 0.26]}>
-        <boxGeometry args={[0.1, 0.06, 0.02]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      <mesh position={[-0.1, 1.6, 0.26]}>
-        <boxGeometry args={[0.1, 0.06, 0.02]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      {/* Pupils */}
-      <mesh position={[0.12, 1.6, 0.272]}>
-        <boxGeometry args={[0.05, 0.05, 0.02]} />
-        <meshStandardMaterial color="#1a1a2e" />
-      </mesh>
-      <mesh position={[-0.08, 1.6, 0.272]}>
-        <boxGeometry args={[0.05, 0.05, 0.02]} />
-        <meshStandardMaterial color="#1a1a2e" />
-      </mesh>
-      {/* Mouth */}
-      <mesh position={[0, 1.47, 0.26]}>
-        <boxGeometry args={[0.14, 0.03, 0.02]} />
-        <meshStandardMaterial color={colors.darker} />
-      </mesh>
-
-      {/* Body */}
-      <mesh position={[0, 0.95, 0]} castShadow>
-        <boxGeometry args={[0.5, 0.7, 0.3]} />
-        <meshStandardMaterial color={colors.main} roughness={0.6} />
-      </mesh>
-      {/* Belt / stripe */}
-      <mesh position={[0, 0.68, 0.001]}>
-        <boxGeometry args={[0.52, 0.06, 0.32]} />
-        <meshStandardMaterial color={colors.dark} roughness={0.5} />
-      </mesh>
-
-      {/* Left Arm */}
-      <group ref={refs.leftArmRef} position={[0.37, 1.2, 0]}>
-        <mesh position={[0, -0.28, 0]} castShadow>
-          <boxGeometry args={[0.22, 0.65, 0.25]} />
-          <meshStandardMaterial color={colors.dark} roughness={0.6} />
-        </mesh>
-        {/* Hand */}
-        <mesh position={[0, -0.55, 0]}>
-          <boxGeometry args={[0.18, 0.12, 0.2]} />
-          <meshStandardMaterial color={colors.light} roughness={0.7} />
-        </mesh>
-      </group>
-
-      {/* Right Arm */}
-      <group ref={refs.rightArmRef} position={[-0.37, 1.2, 0]}>
-        <mesh position={[0, -0.28, 0]} castShadow>
-          <boxGeometry args={[0.22, 0.65, 0.25]} />
-          <meshStandardMaterial color={colors.dark} roughness={0.6} />
-        </mesh>
-        <mesh position={[0, -0.55, 0]}>
-          <boxGeometry args={[0.18, 0.12, 0.2]} />
-          <meshStandardMaterial color={colors.light} roughness={0.7} />
-        </mesh>
-      </group>
-
-      {/* Left Leg */}
-      <group ref={refs.leftLegRef} position={[0.13, 0.55, 0]}>
-        <mesh position={[0, -0.28, 0]} castShadow>
-          <boxGeometry args={[0.22, 0.55, 0.26]} />
-          <meshStandardMaterial color={colors.darker} roughness={0.6} />
-        </mesh>
-        {/* Shoe */}
-        <mesh position={[0, -0.52, 0.03]}>
-          <boxGeometry args={[0.24, 0.08, 0.32]} />
-          <meshStandardMaterial color={colors.darker} roughness={0.5} />
-        </mesh>
-      </group>
-
-      {/* Right Leg */}
-      <group ref={refs.rightLegRef} position={[-0.13, 0.55, 0]}>
-        <mesh position={[0, -0.28, 0]} castShadow>
-          <boxGeometry args={[0.22, 0.55, 0.26]} />
-          <meshStandardMaterial color={colors.darker} roughness={0.6} />
-        </mesh>
-        <mesh position={[0, -0.52, 0.03]}>
-          <boxGeometry args={[0.24, 0.08, 0.32]} />
-          <meshStandardMaterial color={colors.darker} roughness={0.5} />
-        </mesh>
-      </group>
-    </group>
-  );
-}
-
-// ======================================================================
-// Robot Skin (Blocky angular robot)
-// ======================================================================
-function RobotSkin({ colors, refs }: SkinProps) {
-  return (
-    <group>
-      {/* Head - boxy with antenna */}
-      <mesh position={[0, 1.6, 0]} castShadow>
-        <boxGeometry args={[0.55, 0.45, 0.5]} />
-        <meshStandardMaterial color={colors.main} metalness={0.4} roughness={0.3} />
-      </mesh>
-      {/* Visor */}
-      <mesh position={[0, 1.62, 0.251]}>
-        <boxGeometry args={[0.45, 0.15, 0.02]} />
-        <meshStandardMaterial color="#00ff88" emissive="#00ff88" emissiveIntensity={0.6} metalness={0.8} />
-      </mesh>
-      {/* Antenna */}
-      <mesh position={[0, 1.92, 0]} castShadow>
-        <cylinderGeometry args={[0.02, 0.02, 0.2, 6]} />
-        <meshStandardMaterial color={colors.dark} metalness={0.6} />
-      </mesh>
-      <mesh position={[0, 2.05, 0]}>
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshStandardMaterial color="#ff4444" emissive="#ff4444" emissiveIntensity={0.8} />
-      </mesh>
-
-      {/* Body - chunky torso */}
-      <mesh position={[0, 0.95, 0]} castShadow>
-        <boxGeometry args={[0.6, 0.75, 0.35]} />
-        <meshStandardMaterial color={colors.dark} metalness={0.3} roughness={0.4} />
-      </mesh>
-      {/* Chest plate */}
-      <mesh position={[0, 1.0, 0.176]}>
-        <boxGeometry args={[0.35, 0.35, 0.02]} />
-        <meshStandardMaterial color={colors.accent} metalness={0.5} roughness={0.3} />
-      </mesh>
-
-      {/* Left Arm */}
-      <group ref={refs.leftArmRef} position={[0.42, 1.2, 0]}>
-        <mesh position={[0, -0.28, 0]} castShadow>
-          <boxGeometry args={[0.22, 0.6, 0.25]} />
-          <meshStandardMaterial color={colors.main} metalness={0.3} roughness={0.4} />
-        </mesh>
-        <mesh position={[0, -0.48, 0]}>
-          <boxGeometry args={[0.24, 0.18, 0.27]} />
-          <meshStandardMaterial color={colors.dark} metalness={0.4} roughness={0.3} />
-        </mesh>
-      </group>
-
-      {/* Right Arm */}
-      <group ref={refs.rightArmRef} position={[-0.42, 1.2, 0]}>
-        <mesh position={[0, -0.28, 0]} castShadow>
-          <boxGeometry args={[0.22, 0.6, 0.25]} />
-          <meshStandardMaterial color={colors.main} metalness={0.3} roughness={0.4} />
-        </mesh>
-        <mesh position={[0, -0.48, 0]}>
-          <boxGeometry args={[0.24, 0.18, 0.27]} />
-          <meshStandardMaterial color={colors.dark} metalness={0.4} roughness={0.3} />
-        </mesh>
-      </group>
-
-      {/* Left Leg */}
-      <group ref={refs.leftLegRef} position={[0.15, 0.52, 0]}>
-        <mesh position={[0, -0.25, 0]} castShadow>
-          <boxGeometry args={[0.25, 0.5, 0.28]} />
-          <meshStandardMaterial color={colors.darker} metalness={0.3} roughness={0.4} />
-        </mesh>
-      </group>
-
-      {/* Right Leg */}
-      <group ref={refs.rightLegRef} position={[-0.15, 0.52, 0]}>
-        <mesh position={[0, -0.25, 0]} castShadow>
-          <boxGeometry args={[0.25, 0.5, 0.28]} />
-          <meshStandardMaterial color={colors.darker} metalness={0.3} roughness={0.4} />
-        </mesh>
-      </group>
-    </group>
-  );
-}
-
-// ======================================================================
-// Slime Skin (Cute round body with stubby limbs)
-// ======================================================================
-function SlimeSkin({ colors, refs }: SkinProps) {
-  return (
-    <group>
-      {/* Main body (big round) */}
-      <mesh position={[0, 0.85, 0]} castShadow>
-        <boxGeometry args={[0.7, 0.7, 0.65]} />
-        <meshStandardMaterial color={colors.main} roughness={0.4} transparent opacity={0.85} />
-      </mesh>
-      {/* Inner core (slightly visible) */}
-      <mesh position={[0, 0.85, 0]}>
-        <boxGeometry args={[0.35, 0.35, 0.32]} />
-        <meshStandardMaterial color={colors.light} roughness={0.3} transparent opacity={0.5} />
-      </mesh>
-
-      {/* Eyes - big and cute */}
-      <mesh position={[0.15, 1.0, 0.33]}>
-        <boxGeometry args={[0.16, 0.18, 0.02]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      <mesh position={[-0.15, 1.0, 0.33]}>
-        <boxGeometry args={[0.16, 0.18, 0.02]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      {/* Pupils */}
-      <mesh position={[0.17, 0.98, 0.342]}>
-        <boxGeometry args={[0.08, 0.1, 0.02]} />
-        <meshStandardMaterial color="#1a1a2e" />
-      </mesh>
-      <mesh position={[-0.13, 0.98, 0.342]}>
-        <boxGeometry args={[0.08, 0.1, 0.02]} />
-        <meshStandardMaterial color="#1a1a2e" />
-      </mesh>
-      {/* Happy mouth */}
-      <mesh position={[0, 0.78, 0.33]}>
-        <boxGeometry args={[0.2, 0.04, 0.02]} />
-        <meshStandardMaterial color={colors.darker} />
-      </mesh>
-
-      {/* Stubby arms */}
-      <group ref={refs.leftArmRef} position={[0.4, 0.85, 0]}>
-        <mesh position={[0.05, 0, 0]} castShadow>
-          <boxGeometry args={[0.14, 0.22, 0.18]} />
-          <meshStandardMaterial color={colors.dark} roughness={0.4} transparent opacity={0.85} />
-        </mesh>
-      </group>
-      <group ref={refs.rightArmRef} position={[-0.4, 0.85, 0]}>
-        <mesh position={[-0.05, 0, 0]} castShadow>
-          <boxGeometry args={[0.14, 0.22, 0.18]} />
-          <meshStandardMaterial color={colors.dark} roughness={0.4} transparent opacity={0.85} />
-        </mesh>
-      </group>
-
-      {/* Stubby legs */}
-      <group ref={refs.leftLegRef} position={[0.15, 0.45, 0]}>
-        <mesh position={[0, -0.12, 0]} castShadow>
-          <boxGeometry args={[0.2, 0.22, 0.22]} />
-          <meshStandardMaterial color={colors.dark} roughness={0.4} transparent opacity={0.85} />
-        </mesh>
-      </group>
-      <group ref={refs.rightLegRef} position={[-0.15, 0.45, 0]}>
-        <mesh position={[0, -0.12, 0]} castShadow>
-          <boxGeometry args={[0.2, 0.22, 0.22]} />
-          <meshStandardMaterial color={colors.dark} roughness={0.4} transparent opacity={0.85} />
-        </mesh>
-      </group>
-    </group>
-  );
-}
-
-// ======================================================================
-// Knight Skin (Armored warrior with helmet)
-// ======================================================================
-function KnightSkin({ colors, refs }: SkinProps) {
-  return (
-    <group>
-      {/* Helmet */}
-      <mesh position={[0, 1.6, 0]} castShadow>
-        <boxGeometry args={[0.52, 0.52, 0.52]} />
-        <meshStandardMaterial color={colors.dark} metalness={0.5} roughness={0.3} />
-      </mesh>
-      {/* Visor slit */}
-      <mesh position={[0, 1.6, 0.261]}>
-        <boxGeometry args={[0.35, 0.08, 0.02]} />
-        <meshStandardMaterial color="#1a1a2e" />
-      </mesh>
-      {/* Helmet crest */}
-      <mesh position={[0, 1.9, 0]} castShadow>
-        <boxGeometry args={[0.06, 0.12, 0.4]} />
-        <meshStandardMaterial color={colors.accent} metalness={0.4} roughness={0.4} />
-      </mesh>
-
-      {/* Body - armored */}
-      <mesh position={[0, 0.95, 0]} castShadow>
-        <boxGeometry args={[0.55, 0.72, 0.32]} />
-        <meshStandardMaterial color={colors.main} metalness={0.3} roughness={0.4} />
-      </mesh>
-      {/* Chest armor plate */}
-      <mesh position={[0, 1.02, 0.161]}>
-        <boxGeometry args={[0.4, 0.42, 0.02]} />
-        <meshStandardMaterial color={colors.light} metalness={0.5} roughness={0.3} />
-      </mesh>
-      {/* Belt */}
-      <mesh position={[0, 0.66, 0]}>
-        <boxGeometry args={[0.57, 0.08, 0.34]} />
-        <meshStandardMaterial color={colors.darker} metalness={0.4} roughness={0.4} />
-      </mesh>
-      {/* Belt buckle */}
-      <mesh position={[0, 0.66, 0.175]}>
-        <boxGeometry args={[0.08, 0.08, 0.02]} />
-        <meshStandardMaterial color="#FFD700" metalness={0.7} roughness={0.2} />
-      </mesh>
-
-      {/* Left Arm */}
-      <group ref={refs.leftArmRef} position={[0.4, 1.2, 0]}>
-        <mesh position={[0, -0.1, 0]} castShadow>
-          <boxGeometry args={[0.24, 0.28, 0.28]} />
-          <meshStandardMaterial color={colors.dark} metalness={0.4} roughness={0.3} />
-        </mesh>
-        <mesh position={[0, -0.38, 0]} castShadow>
-          <boxGeometry args={[0.2, 0.3, 0.24]} />
-          <meshStandardMaterial color={colors.main} metalness={0.3} roughness={0.4} />
-        </mesh>
-        {/* Gauntlet */}
-        <mesh position={[0, -0.55, 0]}>
-          <boxGeometry args={[0.22, 0.1, 0.26]} />
-          <meshStandardMaterial color={colors.dark} metalness={0.5} roughness={0.3} />
-        </mesh>
-      </group>
-
-      {/* Right Arm */}
-      <group ref={refs.rightArmRef} position={[-0.4, 1.2, 0]}>
-        <mesh position={[0, -0.1, 0]} castShadow>
-          <boxGeometry args={[0.24, 0.28, 0.28]} />
-          <meshStandardMaterial color={colors.dark} metalness={0.4} roughness={0.3} />
-        </mesh>
-        <mesh position={[0, -0.38, 0]} castShadow>
-          <boxGeometry args={[0.2, 0.3, 0.24]} />
-          <meshStandardMaterial color={colors.main} metalness={0.3} roughness={0.4} />
-        </mesh>
-        <mesh position={[0, -0.55, 0]}>
-          <boxGeometry args={[0.22, 0.1, 0.26]} />
-          <meshStandardMaterial color={colors.dark} metalness={0.5} roughness={0.3} />
-        </mesh>
-      </group>
-
-      {/* Left Leg */}
-      <group ref={refs.leftLegRef} position={[0.14, 0.55, 0]}>
-        <mesh position={[0, -0.26, 0]} castShadow>
-          <boxGeometry args={[0.24, 0.55, 0.28]} />
-          <meshStandardMaterial color={colors.darker} metalness={0.3} roughness={0.4} />
-        </mesh>
-        {/* Boot */}
-        <mesh position={[0, -0.5, 0.04]}>
-          <boxGeometry args={[0.26, 0.1, 0.34]} />
-          <meshStandardMaterial color={colors.dark} metalness={0.4} roughness={0.4} />
-        </mesh>
-      </group>
-
-      {/* Right Leg */}
-      <group ref={refs.rightLegRef} position={[-0.14, 0.55, 0]}>
-        <mesh position={[0, -0.26, 0]} castShadow>
-          <boxGeometry args={[0.24, 0.55, 0.28]} />
-          <meshStandardMaterial color={colors.darker} metalness={0.3} roughness={0.4} />
-        </mesh>
-        <mesh position={[0, -0.5, 0.04]}>
-          <boxGeometry args={[0.26, 0.1, 0.34]} />
-          <meshStandardMaterial color={colors.dark} metalness={0.4} roughness={0.4} />
-        </mesh>
-      </group>
     </group>
   );
 }
