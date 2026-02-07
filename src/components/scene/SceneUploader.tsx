@@ -9,13 +9,12 @@ import { useUploadFile } from '@/hooks/useUploadFile';
 import { usePublishScene } from '@/hooks/usePublishScene';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
-import { SCENE_PRESETS, type ScenePreset, isPresetScene } from '@/lib/scene';
+import { SCENE_PRESETS, type ScenePreset, isPresetScene, SCENE_D_TAG } from '@/lib/scene';
 import { cn } from '@/lib/utils';
 
 interface SceneUploaderProps {
   /** Pre-fill with existing scene data for editing */
   initialData?: {
-    dTag: string;
     title: string;
     summary: string;
     imageUrl: string;
@@ -137,9 +136,8 @@ export function SceneUploader({ initialData, onSuccess }: SceneUploaderProps) {
     const finalSceneUrl = isCustomUpload ? sceneUrl : (selectedPreset?.sceneUrl ?? '');
 
     try {
-      const dTag = initialData?.dTag ?? `scene-${Date.now()}`;
       await publishScene({
-        dTag,
+        dTag: SCENE_D_TAG,
         title: title.trim(),
         summary: summary.trim(),
         imageUrl,

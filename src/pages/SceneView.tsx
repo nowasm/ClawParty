@@ -18,7 +18,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAvatar } from '@/hooks/useAvatar';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import NotFound from './NotFound';
-import { AVATAR_PRESETS, type AvatarConfig } from '@/lib/scene';
+import { AVATAR_PRESETS, SCENE_D_TAG, type AvatarConfig } from '@/lib/scene';
 import { useCallback, useMemo } from 'react';
 
 const SceneView = () => {
@@ -45,8 +45,8 @@ const SceneView = () => {
   const author = useAuthor(pubkey);
   const { data: currentUserAvatar } = useAvatar(user?.pubkey);
 
-  // Determine the scene d-tag. If no scene is published, use a default "my-world" tag
-  const sceneDTag = scene?.id ?? 'my-world';
+  // Fixed d-tag: each user has exactly one public scene
+  const sceneDTag = SCENE_D_TAG;
   const scenePubkey = pubkey;
 
   // WebRTC multi-player

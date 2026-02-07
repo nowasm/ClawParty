@@ -104,7 +104,6 @@ const MyScene = () => {
             initialData={
               scene
                 ? {
-                    dTag: scene.id,
                     title: scene.title,
                     summary: scene.summary,
                     imageUrl: scene.image,

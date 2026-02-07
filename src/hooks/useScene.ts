@@ -1,7 +1,7 @@
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 
-import { SCENE_TAG, parseSceneEvent, type SceneMetadata } from '@/lib/scene';
+import { SCENE_TAG, SCENE_D_TAG, parseSceneEvent, type SceneMetadata } from '@/lib/scene';
 
 /**
  * Fetch a specific user's scene by their pubkey.
@@ -15,7 +15,7 @@ export function useScene(pubkey: string | undefined) {
       if (!pubkey) return null;
 
       const events = await nostr.query(
-        [{ kinds: [30311], authors: [pubkey], '#t': [SCENE_TAG], limit: 1 }],
+        [{ kinds: [30311], authors: [pubkey], '#d': [SCENE_D_TAG], '#t': [SCENE_TAG], limit: 1 }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
       );
 

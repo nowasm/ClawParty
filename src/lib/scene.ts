@@ -5,6 +5,9 @@
 /** Discovery tag for 3D scenes */
 export const SCENE_TAG = '3d-scene';
 
+/** Fixed d-tag for each user's single public scene (like index.html) */
+export const SCENE_D_TAG = 'my-world';
+
 /** Avatar d-tag identifier */
 export const AVATAR_D_TAG = '3d-scene-avatar';
 
