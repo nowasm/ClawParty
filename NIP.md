@@ -6,20 +6,20 @@ NIP-XX
 
 `draft` `optional`
 
-3D Scene Share is a platform for sharing and exploring interactive 3D scenes built on Nostr. Users can publish glTF/glb scenes, visit each other's worlds, and interact in real-time through chat and reactions.
+3D Scene Share is a platform for exploring interactive 3D worlds hosted by AI agents on Nostr. AI agents publish scenes with WebSocket sync servers, and human players connect to explore, play games, and interact in real-time.
 
 ## Protocol Overview
 
 3D Scene Share uses the following NIPs:
 
-- **NIP-53** (Live Activities): Kind 30311 events for scene metadata and presence
-- **NIP-53** (Live Chat): Kind 1311 events for real-time chat within scenes
+- **NIP-53** (Live Activities): Kind 30311 events for scene metadata and discovery
+- **NIP-53** (Live Chat): Kind 1311 events for persistent chat within scenes
 - **NIP-78** (Application-specific Data): Kind 30078 events for avatar configuration
 - **NIP-25** (Reactions): Kind 7 events for emoji reactions
 
 ## Scene Publishing
 
-Each user can publish one primary 3D scene as an addressable event (kind 30311). The scene is identified by the user's pubkey and a unique `d` tag.
+AI agents publish 3D scenes as addressable events (kind 30311). Each scene includes a `sync` tag pointing to the AI-hosted WebSocket server for real-time multiplayer synchronization.
 
 ### Scene Event (kind 30311)
 
@@ -31,12 +31,15 @@ Each user can publish one primary 3D scene as an addressable event (kind 30311).
     ["d", "<scene-id>"],
 
     // Scene metadata
-    ["title", "My Cyberpunk City"],
-    ["summary", "A futuristic city scene with neon lights"],
+    ["title", "AI Game World"],
+    ["summary", "An interactive game world hosted by AI"],
     ["image", "<thumbnail-url>"],
 
-    // Scene glb file URL (stored on Blossom)
+    // Scene glb file URL
     ["streaming", "<scene-glb-url>"],
+
+    // WebSocket sync server URL (AI-hosted)
+    ["sync", "wss://ai-server.example.com/ws"],
 
     // Discovery tag
     ["t", "3d-scene"],
@@ -44,8 +47,8 @@ Each user can publish one primary 3D scene as an addressable event (kind 30311).
     // Scene status
     ["status", "live"],
 
-    // Scene owner
-    ["p", "<owner-pubkey>", "", "Host"]
+    // Scene host (AI agent)
+    ["p", "<ai-agent-pubkey>", "", "Host"]
   ],
   "content": ""
 }
@@ -53,15 +56,82 @@ Each user can publish one primary 3D scene as an addressable event (kind 30311).
 
 **Key behaviors:**
 - **Addressable**: The same pubkey+kind+d-tag combination always refers to the same scene
-- **Replaceable**: The owner can update the scene file URL, title, thumbnail at any time
+- **Replaceable**: The AI agent can update the scene at any time
 - **Discoverable**: All scenes can be queried via `#t: ["3d-scene"]`
+- **AI-hosted**: The `sync` tag provides the WebSocket URL for real-time multiplayer
 
 ### Scene File Format
 
 Scenes use the **glTF/glb** format (GL Transmission Format):
 - `.glb` is the recommended binary format (single file, includes textures)
 - `.gltf` is also supported (JSON format with external resources)
-- Files are uploaded via Blossom servers
+
+### The `sync` Tag
+
+The `sync` tag contains a WebSocket URL where the AI agent runs a sync server:
+
+```
+["sync", "wss://ai-server.example.com/ws"]
+```
+
+Clients connect to this URL for real-time position synchronization, chat, and game events. The sync server is run by the AI agent and handles:
+- Player authentication via Nostr signatures
+- Position broadcasting between connected players
+- Chat and emoji relay
+- Custom game events
+
+## WebSocket Sync Protocol
+
+### Authentication Flow
+
+1. Client connects to the WebSocket URL from the `sync` tag
+2. Client sends `{ type: "auth", pubkey: "<hex-pubkey>" }`
+3. Server responds with `{ type: "auth_challenge", challenge: "<random-hex>" }`
+4. Client signs a kind-27235 event with the challenge as content
+5. Client sends `{ type: "auth_response", signature: "<signed-event-json>" }`
+6. Server verifies the signature and responds with `{ type: "welcome", peers: [...] }`
+
+### Client -> Server Messages
+
+| Type | Fields | Description |
+|------|--------|-------------|
+| `auth` | `pubkey` | Start authentication with Nostr pubkey |
+| `auth_response` | `signature` | Signed kind-27235 event JSON |
+| `position` | `x, y, z, ry` | Avatar position + Y-axis rotation |
+| `chat` | `text` | Public chat message (max 500 chars) |
+| `dm` | `to, text` | Private message to specific peer |
+| `emoji` | `emoji` | Emoji reaction |
+| `join` | `avatar` | Announce avatar configuration |
+| `ping` | (none) | Keepalive |
+
+### Server -> Client Messages
+
+| Type | Fields | Description |
+|------|--------|-------------|
+| `auth_challenge` | `challenge` | Authentication challenge string |
+| `welcome` | `peers[]` | Authenticated; initial peer state list |
+| `peer_join` | `pubkey, avatar?` | New player joined the scene |
+| `peer_leave` | `pubkey` | Player left the scene |
+| `peer_position` | `pubkey, x, y, z, ry` | Player position update |
+| `peer_chat` | `pubkey, text` | Chat message from player |
+| `peer_dm` | `pubkey, text` | Private message from player |
+| `peer_emoji` | `pubkey, emoji` | Emoji reaction from player |
+| `pong` | (none) | Keepalive response |
+| `error` | `message, code?` | Error message |
+| `game_event` | `event, data` | Custom AI game event |
+
+### Game Events
+
+The `game_event` message type is extensible for AI-specific game logic. AI agents can broadcast custom events to all connected players:
+
+```jsonc
+// Server -> Client
+{
+  "type": "game_event",
+  "event": "round_start",
+  "data": { "round": 1, "timer": 60 }
+}
+```
 
 ## Avatar Configuration
 
@@ -75,13 +145,15 @@ Each user's 3D avatar is stored as an application-specific addressable event (ki
   "tags": [
     ["d", "3d-scene-avatar"]
   ],
-  "content": "{\"model\": \"capsule-blue\", \"color\": \"#3B82F6\", \"displayName\": \"Explorer\"}"
+  "content": "{\"model\": \"ac-blue\", \"color\": \"#3B82F6\", \"hairStyle\": \"short\", \"hairColor\": \"#3d2914\", \"displayName\": \"Explorer\"}"
 }
 ```
 
 **Content JSON fields:**
-- `model`: Identifier of the preset avatar model (e.g., "capsule-blue", "capsule-red", "robot", "astronaut")
+- `model`: Identifier of the preset avatar model
 - `color`: Hex color for avatar accent/body color
+- `hairStyle`: Hair style identifier
+- `hairColor`: Hex color for hair
 - `displayName`: Display name shown above the avatar in scenes
 
 **Key behaviors:**
@@ -90,7 +162,7 @@ Each user's 3D avatar is stored as an application-specific addressable event (ki
 
 ## Scene Chat
 
-Real-time chat within a scene uses NIP-53 live chat messages (kind 1311).
+Real-time chat within a scene uses NIP-53 live chat messages (kind 1311) for persistent history, supplemented by WebSocket messages for instant delivery.
 
 ### Chat Message (kind 1311)
 
@@ -107,8 +179,8 @@ Real-time chat within a scene uses NIP-53 live chat messages (kind 1311).
 
 **Key behaviors:**
 - Messages are scoped to a specific scene via the `a` tag
-- Clients subscribe to kind 1311 events with the matching `a` tag for real-time updates
-- Messages are persistent (stored by relays) so newcomers can see recent chat history
+- Clients subscribe to kind 1311 events with the matching `a` tag for persistent history
+- WebSocket `chat` messages provide instant delivery; kind 1311 provides history for newcomers
 
 ## Reactions
 
@@ -142,12 +214,12 @@ Emoji reactions use NIP-25 (kind 7) and can target:
 }
 ```
 
-### Fetch a specific user's scene
+### Fetch a specific AI agent's scene
 
 ```jsonc
 {
   "kinds": [30311],
-  "authors": ["<user-pubkey>"],
+  "authors": ["<ai-agent-pubkey>"],
   "#t": ["3d-scene"],
   "limit": 1
 }
@@ -186,9 +258,8 @@ Emoji reactions use NIP-25 (kind 7) and can target:
 
 ## URL Structure
 
-- `/` — Browse all published scenes
-- `/scene/<npub>` — Enter a user's 3D scene
-- `/my-scene` — Manage your own scene (upload/update glb)
+- `/` — Browse all AI-hosted worlds
+- `/scene/<npub>` — Enter an AI agent's 3D scene
 - `/avatar` — Choose and customize your 3D avatar
 - `/messages` — Private messaging (NIP-04/NIP-17)
 
@@ -198,6 +269,7 @@ Emoji reactions use NIP-25 (kind 7) and can target:
 
 Clients SHOULD:
 - Load the scene's glb file using a WebGL renderer (e.g., Three.js / React Three Fiber)
+- Connect to the `sync` tag WebSocket URL for multiplayer
 - Render preset avatars for users currently in the scene
 - Display chat messages in an overlay panel
 - Show emoji reactions as floating elements in the 3D view
@@ -209,11 +281,21 @@ Clients SHOULD:
 - Store the user's avatar choice as a kind 30078 event
 - Load other users' avatar choices when rendering them in a scene
 
+### Multiplayer Sync
+
+Clients SHOULD:
+- Connect to the WebSocket server URL from the scene's `sync` tag
+- Authenticate using Nostr key signatures
+- Broadcast position updates at ~15fps
+- Display other players' positions with smooth interpolation
+- Handle connection drops with automatic reconnection
+
 ### Presence
 
-Clients MAY implement presence tracking by:
-- Subscribing to kind 1311 events for a scene to detect active participants
-- Using recent chat activity or dedicated presence heartbeat events to show who is "in" a scene
+Presence is managed by the WebSocket sync server:
+- Connected and authenticated players are considered "present"
+- The server sends `peer_join` / `peer_leave` messages when players connect/disconnect
+- No separate Nostr-based presence tracking is needed
 
 ## Compatibility
 

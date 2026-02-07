@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { ArrowLeft, Users, Wifi, WifiOff } from 'lucide-react';
+import { ArrowLeft, Users, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -16,7 +16,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useAvatars } from '@/hooks/useAvatar';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAvatar } from '@/hooks/useAvatar';
-import { useWebRTC } from '@/hooks/useWebRTC';
+import { useSceneSync } from '@/hooks/useSceneSync';
 import { useSceneChat } from '@/hooks/useSceneChat';
 import NotFound from './NotFound';
 import { AVATAR_PRESETS, SCENE_D_TAG, type AvatarConfig } from '@/lib/scene';
@@ -48,9 +48,20 @@ const SceneView = () => {
 
   // Fixed d-tag: each user has exactly one public scene
   const sceneDTag = SCENE_D_TAG;
-  const scenePubkey = pubkey;
 
-  // WebRTC multi-player
+  // Spawn at a random position to avoid everyone clustering at origin
+  const initialPosition = useMemo(() => {
+    const half = 49; // TERRAIN_SIZE/2 - 1 in SceneViewer
+    return {
+      x: (Math.random() * 2 - 1) * half,
+      y: 0,
+      z: (Math.random() * 2 - 1) * half,
+      ry: Math.random() * Math.PI * 2,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pubkey]);
+
+  // WebSocket sync (connects to AI-hosted sync server)
   const {
     peerStates,
     connectedCount,
@@ -60,14 +71,14 @@ const SceneView = () => {
     sendPrivateChat,
     liveChatMessages,
     privateChatMessages,
-    isActive: webrtcActive,
-  } = useWebRTC({
-    scenePubkey,
-    sceneDTag,
+    isActive: syncActive,
+    connectionState,
+  } = useSceneSync({
+    syncUrl: scene?.syncUrl,
     enabled: !!user && !!pubkey,
   });
 
-  const { data: sceneChatMessages = [] } = useSceneChat(scenePubkey, sceneDTag);
+  const { data: sceneChatMessages = [] } = useSceneChat(pubkey, sceneDTag);
   const mergedPublicMessages = useMemo(() => {
     const nostrIds = new Set(sceneChatMessages.map((m) => m.id));
     const liveOnly = liveChatMessages.filter((m) => !nostrIds.has(m.id));
@@ -124,7 +135,7 @@ const SceneView = () => {
   const connectedPeers = useMemo(() => {
     return remotePubkeys.map((pk) => ({
       pubkey: pk,
-      displayName: remoteAvatarConfigs[pk]?.displayName ?? pk.slice(0, 12) + '…',
+      displayName: remoteAvatarConfigs[pk]?.displayName ?? pk.slice(0, 12) + '...',
     }));
   }, [remotePubkeys, remoteAvatarConfigs]);
 
@@ -152,8 +163,15 @@ const SceneView = () => {
   const metadata = author.data?.metadata;
   const displayName = metadata?.name || pubkey?.slice(0, 8) || 'Unknown';
 
-  // Total people in scene: current user + WebRTC peers
+  // Total people in scene: current user + connected peers
   const totalPresent = (user ? 1 : 0) + connectedCount;
+
+  // Connection status label
+  const connectionLabel = connectionState === 'connected'
+    ? `Server (${connectedCount})`
+    : connectionState === 'connecting' || connectionState === 'authenticating'
+      ? 'Connecting...'
+      : 'Offline';
 
   useSeoMeta({
     title: scene?.title
@@ -211,22 +229,24 @@ const SceneView = () => {
             </Badge>
             {user && (
               <Badge
-                variant={webrtcActive ? 'default' : 'secondary'}
+                variant={syncActive ? 'default' : 'secondary'}
                 className="gap-1 h-7 text-xs"
               >
-                {webrtcActive ? (
+                {syncActive ? (
                   <Wifi className="h-3 w-3" />
+                ) : connectionState === 'connecting' || connectionState === 'authenticating' ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
                   <WifiOff className="h-3 w-3" />
                 )}
-                {webrtcActive ? `P2P (${connectedCount})` : 'Offline'}
+                {connectionLabel}
               </Badge>
             )}
           </div>
         </div>
       </div>
 
-      {/* Main 3D viewport — fills all remaining height */}
+      {/* Main 3D viewport -- fills all remaining height */}
       <div className="flex-1 relative min-h-0">
         <SceneViewer
           sceneUrl={scene?.sceneUrl}
@@ -236,6 +256,7 @@ const SceneView = () => {
           peerStates={peerStates}
           onPositionUpdate={broadcastPosition}
           speechBubbles={speechBubbles}
+          initialPosition={initialPosition}
           className="absolute inset-0 rounded-none border-0"
         />
 

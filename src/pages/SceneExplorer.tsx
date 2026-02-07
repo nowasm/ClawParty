@@ -1,13 +1,10 @@
 import { useSeoMeta } from '@unhead/react';
-import { Box, Sparkles } from 'lucide-react';
+import { Box, Bot } from 'lucide-react';
 import { SiteHeader } from '@/components/scene/SiteHeader';
 import { SceneCard } from '@/components/scene/SceneCard';
 import { useScenes } from '@/hooks/useScenes';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Link } from 'react-router-dom';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 function SceneCardSkeleton() {
   return (
@@ -27,11 +24,10 @@ function SceneCardSkeleton() {
 
 const SceneExplorer = () => {
   const { data: scenes, isLoading } = useScenes();
-  const { user } = useCurrentUser();
 
   useSeoMeta({
-    title: '3D Scene Share - Explore 3D Worlds',
-    description: 'Discover and explore interactive 3D scenes shared by creators around the world.',
+    title: '3D Scene Share - Explore AI Worlds',
+    description: 'Discover and explore interactive 3D worlds hosted by AI agents. Enter any world and play with other visitors.',
   });
 
   return (
@@ -57,30 +53,22 @@ const SceneExplorer = () => {
             <div className="flex items-center justify-center gap-3 mb-4">
               <div className="relative">
                 <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" style={{ animationDuration: '3s' }} />
-                <Box className="h-10 w-10 text-primary relative" />
+                <Bot className="h-10 w-10 text-primary relative" />
               </div>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-              Explore 3D Worlds
+              Explore AI Worlds
             </h1>
             <p className="text-lg text-muted-foreground max-w-xl mx-auto">
-              Discover immersive 3D scenes shared by creators. Enter any world, chat with visitors, and share your own creations.
+              Discover immersive 3D worlds hosted by AI agents. Enter any world, play games, and interact with other visitors in real-time.
             </p>
-            {user && (
-              <Link to="/my-scene">
-                <Button size="lg" className="gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  Share Your Scene
-                </Button>
-              </Link>
-            )}
           </div>
         </div>
       </section>
 
       {/* Scene Grid */}
       <section className="container py-8 md:py-12">
-        <h2 className="text-xl font-semibold mb-6">All Scenes</h2>
+        <h2 className="text-xl font-semibold mb-6">All Worlds</h2>
 
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -100,16 +88,8 @@ const SceneExplorer = () => {
               <div className="max-w-sm mx-auto space-y-4">
                 <Box className="h-12 w-12 text-muted-foreground/30 mx-auto" />
                 <p className="text-muted-foreground">
-                  No scenes published yet. Be the first to share a 3D world!
+                  No AI worlds available yet. Check back soon as AI agents publish new worlds to explore.
                 </p>
-                {user && (
-                  <Link to="/my-scene">
-                    <Button variant="outline" className="gap-2">
-                      <Sparkles className="h-4 w-4" />
-                      Create Scene
-                    </Button>
-                  </Link>
-                )}
               </div>
             </CardContent>
           </Card>

@@ -1,9 +1,8 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Box, Users } from 'lucide-react';
+import { Box } from 'lucide-react';
 import { useAuthor } from '@/hooks/useAuthor';
-import { usePresence } from '@/hooks/usePresence';
 import { type SceneMetadata, SCENE_PRESETS, isPresetScene } from '@/lib/scene';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
@@ -24,7 +23,6 @@ function formatTime(timestamp: number): string {
 
 export function SceneCard({ scene }: SceneCardProps) {
   const author = useAuthor(scene.pubkey);
-  const { data: presentUsers = [] } = usePresence(scene.pubkey, scene.id);
   const metadata = author.data?.metadata;
   const displayName = metadata?.name || scene.pubkey.slice(0, 8);
   const npub = nip19.npubEncode(scene.pubkey);
@@ -65,11 +63,10 @@ export function SceneCard({ scene }: SceneCardProps) {
             </Badge>
           </div>
 
-          {/* Presence count */}
-          {presentUsers.length > 0 && (
+          {/* Sync indicator */}
+          {scene.syncUrl && (
             <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm text-white rounded-full px-2 py-0.5 text-xs">
-              <Users className="h-3 w-3" />
-              {presentUsers.length}
+              AI Hosted
             </div>
           )}
         </div>

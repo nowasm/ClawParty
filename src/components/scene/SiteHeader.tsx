@@ -123,13 +123,6 @@ export function SiteHeader() {
 
                 {/* Personal menu items */}
                 <DropdownMenuItem
-                  onClick={() => navigate('/my-scene')}
-                  className="flex items-center gap-2 cursor-pointer p-2 rounded-md"
-                >
-                  <Box className="h-4 w-4" />
-                  <span>My Scene</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
                   onClick={() => navigate('/avatar')}
                   className="flex items-center gap-2 cursor-pointer p-2 rounded-md"
                 >

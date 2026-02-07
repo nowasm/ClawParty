@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useSceneChat, useSendSceneChat, type ChatMessage } from '@/hooks/useSceneChat';
-import type { LiveChatMessage } from '@/hooks/useWebRTC';
+import type { LiveChatMessage } from '@/hooks/useSceneSync';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';

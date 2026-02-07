@@ -23,17 +23,6 @@ export const DEFAULT_RELAY_URLS = [
   'wss://nos.lol',
 ];
 
-/**
- * Relays used for WebRTC signaling (kind 25050).
- * Multiple relays improve delivery so peers can discover each other.
- */
-export const SIGNALING_RELAY_URLS = [
-  'wss://relay.ditto.pub',
-  'wss://relay.primal.net',
-  'wss://relay.damus.io',
-  'wss://nos.lol',
-];
-
 /** Preset avatar definitions */
 export interface AvatarPreset {
   id: string;
@@ -142,6 +131,8 @@ export interface SceneMetadata {
   summary: string;
   image: string;
   sceneUrl: string;
+  /** WebSocket sync server URL provided by the AI host */
+  syncUrl: string;
   status: string;
   createdAt: number;
 }
@@ -163,6 +154,7 @@ export function parseSceneEvent(event: { kind: number; pubkey: string; tags: str
     summary: getTag('summary'),
     image: getTag('image'),
     sceneUrl: getTag('streaming'),
+    syncUrl: getTag('sync'),
     status: getTag('status') || 'live',
     createdAt: event.created_at,
   };

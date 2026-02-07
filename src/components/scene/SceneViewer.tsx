@@ -4,7 +4,7 @@ import { Environment, useGLTF, Html, Sky } from '@react-three/drei';
 import * as THREE from 'three';
 import { AvatarModel } from './AvatarModel';
 import { type AvatarConfig, getAvatarPreset, AVATAR_PRESETS, isPresetScene } from '@/lib/scene';
-import type { PeerState, PeerPosition } from '@/lib/webrtc';
+import type { PeerState, PeerPosition } from '@/lib/wsSync';
 
 // ============================================================================
 // Constants
@@ -50,6 +50,8 @@ interface SceneViewerProps {
   onPositionUpdate?: (pos: PeerPosition) => void;
   /** Callback to broadcast emoji */
   onEmoji?: (emoji: string) => void;
+  /** Initial spawn position (e.g. random when entering someone else's scene). Omit for origin. */
+  initialPosition?: PeerPosition;
   className?: string;
 }
 
@@ -197,6 +199,8 @@ interface LocalPlayerProps {
   speechBubbles?: SpeechBubbleItem[];
   /** Active emoji for triggering avatar action animation */
   emoji?: string | null;
+  /** Initial position (e.g. random spawn in others' scenes). Defaults to origin. */
+  initialPosition?: PeerPosition;
 }
 
 /** Vertical gap between name and first bubble, and between bubbles (tighter = closer to head) */
@@ -209,12 +213,16 @@ const BUBBLE_MAX_WIDTH = 200;
 
 export type MoveState = 'idle' | 'walk' | 'run';
 
-function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji }: LocalPlayerProps) {
+const SPAWN_HALF = TERRAIN_SIZE / 2 - 1; // same clamp as movement, for random spawn bounds
+
+function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji, initialPosition }: LocalPlayerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { camera, gl } = useThree();
   const keysRef = useRef<Set<string>>(new Set());
-  // Character position + facing direction (ry)
-  const posRef = useRef({ x: 0, y: 0, z: 0, ry: 0 });
+  // Character position + facing direction (ry); use initialPosition when entering others' scene
+  const posRef = useRef<{ x: number; y: number; z: number; ry: number }>(
+    initialPosition ?? { x: 0, y: 0, z: 0, ry: 0 },
+  );
   /** Vertical velocity for jump (m/s) */
   const vyRef = useRef(0);
   // Camera orbit angles (independent of character facing)
@@ -361,9 +369,8 @@ function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji }: Lo
     }
 
     // Clamp to terrain bounds
-    const half = TERRAIN_SIZE / 2 - 1;
-    pos.x = Math.max(-half, Math.min(half, pos.x));
-    pos.z = Math.max(-half, Math.min(half, pos.z));
+    pos.x = Math.max(-SPAWN_HALF, Math.min(SPAWN_HALF, pos.x));
+    pos.z = Math.max(-SPAWN_HALF, Math.min(SPAWN_HALF, pos.z));
 
     // Apply position + facing to character mesh
     groupRef.current.position.set(pos.x, pos.y, pos.z);
@@ -612,6 +619,7 @@ export function SceneViewer({
   peerStates = {},
   speechBubbles = {},
   onPositionUpdate,
+  initialPosition,
   className,
 }: SceneViewerProps) {
   // WebGL context lost (e.g. tab backgrounded, GPU reset)
@@ -694,6 +702,7 @@ export function SceneViewer({
               onPositionUpdate={onPositionUpdate}
               speechBubbles={speechBubbles[currentUserPubkey]}
               emoji={_myEmoji}
+              initialPosition={initialPosition}
             />
           )}
 

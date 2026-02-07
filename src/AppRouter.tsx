@@ -3,7 +3,6 @@ import { ScrollToTop } from "./components/ScrollToTop";
 
 import SceneExplorer from "./pages/SceneExplorer";
 import SceneView from "./pages/SceneView";
-import MyScene from "./pages/MyScene";
 import AvatarSetup from "./pages/AvatarSetup";
 import Messages from "./pages/Messages";
 import Settings from "./pages/Settings";
@@ -19,7 +18,6 @@ export function AppRouter() {
       <Routes>
         <Route path="/" element={<SceneExplorer />} />
         <Route path="/scene/:npub" element={<SceneView />} />
-        <Route path="/my-scene" element={<MyScene />} />
         <Route path="/avatar" element={<AvatarSetup />} />
         <Route path="/messages" element={<Messages />} />
         <Route path="/settings" element={<Settings />} />
