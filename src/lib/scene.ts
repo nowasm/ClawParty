@@ -95,3 +95,81 @@ export function getAvatarPreset(modelId: string): AvatarPreset {
 export function sceneAddress(pubkey: string, dTag: string): string {
   return `30311:${pubkey}:${dTag}`;
 }
+
+// ============================================================================
+// Preset Scenes (built-in scenes users can pick from)
+// ============================================================================
+
+export interface ScenePreset {
+  id: string;
+  title: string;
+  summary: string;
+  /** Empty string means "use the default terrain" */
+  sceneUrl: string;
+  /** Emoji icon for visual identification */
+  icon: string;
+  /** CSS gradient for the card background */
+  gradient: string;
+}
+
+export const SCENE_PRESETS: ScenePreset[] = [
+  {
+    id: 'green-plains',
+    title: 'Green Plains',
+    summary: 'A peaceful 100m green grassland with rocks and open sky.',
+    sceneUrl: '',
+    icon: '🌿',
+    gradient: 'from-green-500/20 to-emerald-600/10',
+  },
+  {
+    id: 'desert-dunes',
+    title: 'Desert Dunes',
+    summary: 'Golden sand terrain under a warm sunset sky.',
+    sceneUrl: '__preset__desert',
+    icon: '🏜️',
+    gradient: 'from-amber-500/20 to-orange-600/10',
+  },
+  {
+    id: 'snow-field',
+    title: 'Snow Field',
+    summary: 'A pristine white snowfield with icy atmosphere.',
+    sceneUrl: '__preset__snow',
+    icon: '❄️',
+    gradient: 'from-blue-300/20 to-cyan-400/10',
+  },
+  {
+    id: 'lava-rocks',
+    title: 'Lava Rocks',
+    summary: 'A volcanic landscape with dark rocks and glowing cracks.',
+    sceneUrl: '__preset__lava',
+    icon: '🌋',
+    gradient: 'from-red-600/20 to-orange-700/10',
+  },
+  {
+    id: 'ocean-platform',
+    title: 'Ocean Platform',
+    summary: 'A floating platform surrounded by endless ocean.',
+    sceneUrl: '__preset__ocean',
+    icon: '🌊',
+    gradient: 'from-blue-500/20 to-indigo-600/10',
+  },
+  {
+    id: 'night-city',
+    title: 'Night City',
+    summary: 'A neon-lit urban ground under the night sky.',
+    sceneUrl: '__preset__night',
+    icon: '🌃',
+    gradient: 'from-purple-600/20 to-indigo-800/10',
+  },
+];
+
+/** Check if a scene URL is a built-in preset */
+export function isPresetScene(url: string): boolean {
+  return url === '' || url.startsWith('__preset__');
+}
+
+/** Get preset ID from scene URL */
+export function getPresetId(url: string): string {
+  if (url === '') return 'green-plains';
+  return SCENE_PRESETS.find((p) => p.sceneUrl === url)?.id ?? 'green-plains';
+}

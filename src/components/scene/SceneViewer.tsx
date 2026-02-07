@@ -1,9 +1,9 @@
-import { Suspense, useRef, useEffect, useCallback, useState } from 'react';
+import { Suspense, useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Environment, useGLTF, Html, Sky } from '@react-three/drei';
 import * as THREE from 'three';
 import { AvatarModel } from './AvatarModel';
-import { type AvatarConfig, getAvatarPreset, AVATAR_PRESETS } from '@/lib/scene';
+import { type AvatarConfig, getAvatarPreset, AVATAR_PRESETS, isPresetScene } from '@/lib/scene';
 import type { PeerState, PeerPosition } from '@/lib/webrtc';
 
 // ============================================================================
@@ -40,21 +40,89 @@ interface SceneViewerProps {
 }
 
 // ============================================================================
-// Terrain (100m x 100m)
+// Terrain themes
 // ============================================================================
 
-function Terrain() {
+interface TerrainTheme {
+  groundColor: string;
+  gridColor1: string;
+  gridColor2: string;
+  rockColor: string;
+  markerColor: string;
+  fogColor: string;
+  skyProps: { sunPosition: [number, number, number]; turbidity: number; rayleigh: number };
+  envPreset: 'sunset' | 'dawn' | 'night' | 'warehouse' | 'city' | 'park' | 'apartment' | 'studio' | 'forest' | 'lobby';
+}
+
+const TERRAIN_THEMES: Record<string, TerrainTheme> = {
+  '': {
+    groundColor: '#4a7c59', gridColor1: '#5a8c69', gridColor2: '#4a7c5940',
+    rockColor: '#78716c', markerColor: '#d97706',
+    fogColor: '#c9daf8', skyProps: { sunPosition: [100, 60, 100], turbidity: 3, rayleigh: 0.5 },
+    envPreset: 'sunset',
+  },
+  '__preset__desert': {
+    groundColor: '#c2956a', gridColor1: '#d4a574', gridColor2: '#c2956a40',
+    rockColor: '#a08060', markerColor: '#ef4444',
+    fogColor: '#f5e6d3', skyProps: { sunPosition: [80, 30, 60], turbidity: 8, rayleigh: 1.5 },
+    envPreset: 'sunset',
+  },
+  '__preset__snow': {
+    groundColor: '#e8edf2', gridColor1: '#d0d8e0', gridColor2: '#b8c4d040',
+    rockColor: '#94a3b8', markerColor: '#3b82f6',
+    fogColor: '#e2e8f0', skyProps: { sunPosition: [50, 20, 80], turbidity: 0.5, rayleigh: 0.2 },
+    envPreset: 'dawn',
+  },
+  '__preset__lava': {
+    groundColor: '#2a1a1a', gridColor1: '#ff440030', gridColor2: '#ff220015',
+    rockColor: '#1a1a1a', markerColor: '#ff4400',
+    fogColor: '#1a0a0a', skyProps: { sunPosition: [30, 10, 50], turbidity: 10, rayleigh: 3 },
+    envPreset: 'night',
+  },
+  '__preset__ocean': {
+    groundColor: '#2d6a8a', gridColor1: '#3d8ab0', gridColor2: '#2d6a8a40',
+    rockColor: '#5ea0b0', markerColor: '#22d3ee',
+    fogColor: '#bae6fd', skyProps: { sunPosition: [100, 50, 80], turbidity: 2, rayleigh: 0.8 },
+    envPreset: 'lobby',
+  },
+  '__preset__night': {
+    groundColor: '#1e1b2e', gridColor1: '#a855f730', gridColor2: '#6366f120',
+    rockColor: '#312e4a', markerColor: '#a855f7',
+    fogColor: '#0f0d1a', skyProps: { sunPosition: [-100, -10, 50], turbidity: 10, rayleigh: 0.1 },
+    envPreset: 'night',
+  },
+};
+
+function getTheme(sceneUrl: string): TerrainTheme {
+  return TERRAIN_THEMES[sceneUrl] ?? TERRAIN_THEMES[''];
+}
+
+// Deterministic decorations (no Math.random at render time)
+const DECORATIONS = Array.from({ length: 12 }).map((_, i) => {
+  const angle = (i / 12) * Math.PI * 2;
+  const r = 15 + Math.sin(i * 3.7) * 10;
+  const scale = 0.5 + ((Math.sin(i * 7.3) + 1) / 2) * 1.5;
+  return {
+    x: Math.cos(angle) * r,
+    z: Math.sin(angle) * r,
+    scale,
+  };
+});
+
+function Terrain({ sceneUrl = '' }: { sceneUrl?: string }) {
+  const theme = getTheme(sceneUrl);
+
   return (
     <group>
       {/* Main ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[TERRAIN_SIZE, TERRAIN_SIZE, 64, 64]} />
-        <meshStandardMaterial color="#4a7c59" roughness={0.9} metalness={0} />
+        <meshStandardMaterial color={theme.groundColor} roughness={0.9} metalness={0} />
       </mesh>
 
       {/* Grid overlay */}
       <gridHelper
-        args={[TERRAIN_SIZE, TERRAIN_SIZE / 2, '#5a8c69', '#4a7c5940']}
+        args={[TERRAIN_SIZE, TERRAIN_SIZE / 2, theme.gridColor1, theme.gridColor2]}
         position={[0, 0.01, 0]}
       />
 
@@ -67,24 +135,29 @@ function Terrain() {
       ].map(([x, y, z], i) => (
         <mesh key={i} position={[x, y + 1, z]} castShadow>
           <cylinderGeometry args={[0.15, 0.15, 2, 8]} />
-          <meshStandardMaterial color="#d97706" emissive="#d97706" emissiveIntensity={0.3} />
+          <meshStandardMaterial color={theme.markerColor} emissive={theme.markerColor} emissiveIntensity={0.3} />
         </mesh>
       ))}
 
-      {/* A few decorative elements on the terrain */}
-      {Array.from({ length: 12 }).map((_, i) => {
-        const angle = (i / 12) * Math.PI * 2;
-        const r = 15 + Math.sin(i * 3.7) * 10;
-        const x = Math.cos(angle) * r;
-        const z = Math.sin(angle) * r;
-        const scale = 0.5 + Math.random() * 1.5;
-        return (
-          <mesh key={`rock-${i}`} position={[x, scale * 0.3, z]} castShadow>
-            <dodecahedronGeometry args={[scale * 0.5, 0]} />
-            <meshStandardMaterial color="#78716c" roughness={0.85} />
-          </mesh>
-        );
-      })}
+      {/* Lava glow cracks */}
+      {sceneUrl === '__preset__lava' && (
+        <>
+          {DECORATIONS.slice(0, 8).map((d, i) => (
+            <mesh key={`glow-${i}`} position={[d.x * 0.7, 0.02, d.z * 0.7]} rotation={[-Math.PI / 2, 0, i]}>
+              <planeGeometry args={[d.scale * 2, 0.15]} />
+              <meshStandardMaterial color="#ff4400" emissive="#ff4400" emissiveIntensity={2} transparent opacity={0.6} />
+            </mesh>
+          ))}
+        </>
+      )}
+
+      {/* Decorative elements */}
+      {DECORATIONS.map((d, i) => (
+        <mesh key={`rock-${i}`} position={[d.x, d.scale * 0.3, d.z]} castShadow>
+          <dodecahedronGeometry args={[d.scale * 0.5, 0]} />
+          <meshStandardMaterial color={theme.rockColor} roughness={0.85} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -310,6 +383,10 @@ export function SceneViewer({
   // Make showMyEmoji available to parent
   (SceneViewer as unknown as Record<string, unknown>)._showEmoji = showMyEmoji;
 
+  // Resolve theme from scene URL
+  const isPreset = isPresetScene(sceneUrl ?? '');
+  const theme = useMemo(() => getTheme(isPreset ? (sceneUrl ?? '') : ''), [sceneUrl, isPreset]);
+
   return (
     <div className={`w-full h-full min-h-[400px] rounded-xl overflow-hidden bg-muted/30 border border-border ${className ?? ''}`}>
       <Canvas
@@ -338,18 +415,22 @@ export function SceneViewer({
           />
           <hemisphereLight args={['#87ceeb', '#4a7c59', 0.3]} />
 
-          {/* Sky */}
-          <Sky sunPosition={[100, 60, 100]} turbidity={3} rayleigh={0.5} />
+          {/* Sky — theme aware */}
+          <Sky
+            sunPosition={theme.skyProps.sunPosition}
+            turbidity={theme.skyProps.turbidity}
+            rayleigh={theme.skyProps.rayleigh}
+          />
 
           {/* Scene content */}
-          {sceneUrl ? (
+          {sceneUrl && !isPreset ? (
             <>
               <GLTFScene url={sceneUrl} />
-              {/* Still add terrain as a fallback floor */}
-              <Terrain />
+              {/* Fallback floor under uploaded glTF */}
+              <Terrain sceneUrl="" />
             </>
           ) : (
-            <Terrain />
+            <Terrain sceneUrl={isPreset ? (sceneUrl ?? '') : ''} />
           )}
 
           {/* Local player (WASD controlled) */}
@@ -378,11 +459,11 @@ export function SceneViewer({
             );
           })}
 
-          {/* Environment map for reflections */}
-          <Environment preset="sunset" />
+          {/* Environment map for reflections — theme aware */}
+          <Environment preset={theme.envPreset} />
 
-          {/* Fog for depth */}
-          <fog attach="fog" args={['#c9daf8', 60, 120]} />
+          {/* Fog for depth — theme aware */}
+          <fog attach="fog" args={[theme.fogColor, 60, 120]} />
         </Suspense>
       </Canvas>
 
