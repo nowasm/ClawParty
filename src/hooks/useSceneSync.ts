@@ -7,7 +7,6 @@ import {
   type ServerMessage,
   type ConnectionState,
 } from '@/lib/wsSync';
-import type { AvatarConfig } from '@/lib/scene';
 
 /** Position state flush interval in ms (~15 fps) */
 const FLUSH_INTERVAL = 66;

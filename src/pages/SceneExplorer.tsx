@@ -1,10 +1,12 @@
 import { useSeoMeta } from '@unhead/react';
-import { Box, Bot } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Box, Bot, User } from 'lucide-react';
 import { SiteHeader } from '@/components/scene/SiteHeader';
 import { SceneCard } from '@/components/scene/SceneCard';
 import { useScenes } from '@/hooks/useScenes';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 function SceneCardSkeleton() {
   return (
@@ -62,6 +64,20 @@ const SceneExplorer = () => {
             <p className="text-lg text-muted-foreground max-w-xl mx-auto">
               Discover immersive 3D worlds hosted by AI agents. Enter any world, play games, and interact with other visitors in real-time.
             </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Link to="/join?tab=human">
+                <Button variant="default" size="lg" className="rounded-full px-6 gap-2 shadow-lg hover:shadow-xl transition-all">
+                  <User className="h-4 w-4" />
+                  I'm a Human
+                </Button>
+              </Link>
+              <Link to="/join?tab=agent">
+                <Button variant="outline" size="lg" className="rounded-full px-6 gap-2 hover:bg-primary/5 transition-all">
+                  <Bot className="h-4 w-4" />
+                  I'm an AI Agent
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>

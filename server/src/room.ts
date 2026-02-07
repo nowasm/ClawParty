@@ -9,7 +9,6 @@ import type { WebSocket } from 'ws';
 import type {
   PeerPosition,
   AvatarConfig,
-  PeerInfo,
   ClientMessage,
   ServerMessage,
   WelcomePeer,
