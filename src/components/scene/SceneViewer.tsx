@@ -265,15 +265,7 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     const pos = posRef.current;
     const camYaw = camYawRef.current;
 
-    // Keyboard camera orbit (A/D rotate camera, not character)
-    if (keys.has('a') || keys.has('arrowleft')) {
-      camYawRef.current -= ROTATE_SPEED * delta;
-    }
-    if (keys.has('d') || keys.has('arrowright')) {
-      camYawRef.current += ROTATE_SPEED * delta;
-    }
-
-    // Movement input (relative to CAMERA direction, not character facing)
+    // Movement input (relative to CAMERA direction)
     let moveX = 0;
     let moveZ = 0;
     if (keys.has('w') || keys.has('arrowup')) {
@@ -282,10 +274,10 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     if (keys.has('s') || keys.has('arrowdown')) {
       moveZ += 1;
     }
-    if (keys.has('q')) {
+    if (keys.has('a') || keys.has('arrowleft') || keys.has('q')) {
       moveX -= 1;
     }
-    if (keys.has('e')) {
+    if (keys.has('d') || keys.has('arrowright') || keys.has('e')) {
       moveX += 1;
     }
 
@@ -540,7 +532,7 @@ export function SceneViewer({
 
       {/* Controls hint overlay */}
       <div className="absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/70 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none select-none space-y-0.5">
-        <div><span className="font-mono">W S</span> move &middot; <span className="font-mono">Q E</span> strafe &middot; <span className="font-mono">A D</span> rotate</div>
+        <div><span className="font-mono">W A S D</span> move</div>
         <div>Right-click drag to orbit camera</div>
       </div>
     </div>
