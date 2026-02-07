@@ -252,11 +252,11 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     groupRef.current.position.set(pos.x, pos.y, pos.z);
     groupRef.current.rotation.y = pos.ry;
 
-    // Camera follow (third-person)
+    // Camera follow (third-person, behind the player)
     const targetCamPos = new THREE.Vector3(
       pos.x - Math.sin(pos.ry) * CAMERA_DISTANCE,
       pos.y + CAMERA_HEIGHT,
-      pos.z - Math.cos(pos.ry) * CAMERA_DISTANCE,
+      pos.z + Math.cos(pos.ry) * CAMERA_DISTANCE,
     );
     camera.position.lerp(targetCamPos, CAMERA_LERP);
     camera.lookAt(pos.x, pos.y + 1.5, pos.z);
