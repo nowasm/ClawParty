@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { NRelay1 } from '@nostrify/nostrify';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { SCENE_TAG, DEFAULT_RELAY_URLS } from '@/lib/scene';
+import { SCENE_TAG } from '@/lib/scene';
+import { publishToDefaultRelays } from '@/lib/relayPool';
 
 interface PublishSceneParams {
   dTag: string;
@@ -15,8 +15,7 @@ interface PublishSceneParams {
 
 /**
  * Publish or update the current user's 3D scene (kind 30311).
- * Signs the event and broadcasts to each default relay individually using
- * direct NRelay1 connections (bypasses pool routing for reliability).
+ * Uses a persistent relay pool so connections are reused.
  */
 export function usePublishScene() {
   const { nostr } = useNostr();
@@ -50,25 +49,8 @@ export function usePublishScene() {
 
       console.log('Scene event signed:', event.id);
 
-      // Publish to each default relay individually with direct connections
-      const relayResults = await Promise.allSettled(
-        DEFAULT_RELAY_URLS.map(async (url) => {
-          const relay = new NRelay1(url);
-          try {
-            await relay.event(event, { signal: AbortSignal.timeout(8000) });
-            console.log(`Published to ${url}`);
-            return url;
-          } catch (err) {
-            console.warn(`Failed to publish to ${url}:`, err);
-            throw err;
-          } finally {
-            relay.close();
-          }
-        }),
-      );
-
-      const succeeded = relayResults.filter((r) => r.status === 'fulfilled').length;
-      console.log(`Scene published to ${succeeded}/${DEFAULT_RELAY_URLS.length} relays`);
+      // Publish to all default relays via persistent connections
+      await publishToDefaultRelays(event);
 
       // Also try user's configured relays via pool (fire-and-forget)
       nostr.event(event, { signal: AbortSignal.timeout(5000) }).catch(() => {});

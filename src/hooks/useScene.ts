@@ -1,46 +1,27 @@
-import { NRelay1, type NostrEvent } from '@nostrify/nostrify';
 import { useQuery } from '@tanstack/react-query';
 
-import { SCENE_TAG, SCENE_D_TAG, DEFAULT_RELAY_URLS, parseSceneEvent, type SceneMetadata } from '@/lib/scene';
+import { SCENE_TAG, SCENE_D_TAG, parseSceneEvent, type SceneMetadata } from '@/lib/scene';
+import { queryAllDefaultRelays } from '@/lib/relayPool';
 
 /**
  * Fetch a specific user's scene by their pubkey.
- * Queries each default relay independently for reliable discovery.
+ * Uses a persistent relay pool for reliable discovery across origins.
  */
 export function useScene(pubkey: string | undefined) {
   return useQuery<SceneMetadata | null>({
     queryKey: ['scenes', 'by-author', pubkey ?? ''],
-    queryFn: async ({ signal }) => {
+    queryFn: async () => {
       if (!pubkey) return null;
 
-      const filter = [{ kinds: [30311], authors: [pubkey], '#d': [SCENE_D_TAG], '#t': [SCENE_TAG], limit: 1 }];
-      const timeout = AbortSignal.timeout(12000);
-      const combined = AbortSignal.any([signal, timeout]);
-
-      let newest: NostrEvent | null = null;
-
-      const results = await Promise.allSettled(
-        DEFAULT_RELAY_URLS.map(async (url) => {
-          const relay = new NRelay1(url);
-          try {
-            return await relay.query(filter, { signal: combined });
-          } finally {
-            relay.close();
-          }
-        }),
+      const events = await queryAllDefaultRelays(
+        [{ kinds: [30311], authors: [pubkey], '#d': [SCENE_D_TAG], '#t': [SCENE_TAG], limit: 1 }],
+        { signal: AbortSignal.timeout(12000) },
       );
 
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          for (const event of result.value) {
-            if (!newest || event.created_at > newest.created_at) {
-              newest = event;
-            }
-          }
-        }
-      }
+      if (events.length === 0) return null;
 
-      if (!newest) return null;
+      // queryAllDefaultRelays already deduplicates, pick the newest
+      const newest = events.sort((a, b) => b.created_at - a.created_at)[0];
       return parseSceneEvent(newest);
     },
     enabled: !!pubkey,
