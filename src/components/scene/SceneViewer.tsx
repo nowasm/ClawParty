@@ -187,8 +187,11 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { camera, gl } = useThree();
   const keysRef = useRef<Set<string>>(new Set());
+  // Character position + facing direction (ry)
   const posRef = useRef({ x: 0, y: 0, z: 0, ry: 0 });
-  const pitchRef = useRef(0.3); // camera pitch (vertical angle)
+  // Camera orbit angles (independent of character facing)
+  const camYawRef = useRef(0);   // horizontal orbit around character
+  const camPitchRef = useRef(0.3); // vertical angle
   const lastBroadcast = useRef(0);
 
   const preset = avatar ? getAvatarPreset(avatar.model) : AVATAR_PRESETS[0];
@@ -197,7 +200,6 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
   // Key listeners
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // Ignore when typing in input fields
       if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
       keysRef.current.add(e.key.toLowerCase());
     };
@@ -213,7 +215,7 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     };
   }, []);
 
-  // Mouse look via right-click drag (no pointer lock)
+  // Right-click drag → orbit camera around character
   const rightDragging = useRef(false);
 
   useEffect(() => {
@@ -232,15 +234,14 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     };
     const onMouseMove = (e: MouseEvent) => {
       if (!rightDragging.current) return;
-      // Horizontal → yaw (mouse left = character turns left = positive ry)
-      posRef.current.ry += e.movementX * MOUSE_SENSITIVITY;
-      // Vertical → pitch (clamped)
-      pitchRef.current = Math.max(
+      // Horizontal → camera orbit yaw
+      camYawRef.current += e.movementX * MOUSE_SENSITIVITY;
+      // Vertical → camera pitch (clamped)
+      camPitchRef.current = Math.max(
         PITCH_MIN,
-        Math.min(PITCH_MAX, pitchRef.current + e.movementY * MOUSE_SENSITIVITY),
+        Math.min(PITCH_MAX, camPitchRef.current + e.movementY * MOUSE_SENSITIVITY),
       );
     };
-    // Prevent context menu on right-click inside the canvas
     const onContextMenu = (e: Event) => {
       e.preventDefault();
     };
@@ -262,16 +263,17 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     if (!groupRef.current) return;
     const keys = keysRef.current;
     const pos = posRef.current;
+    const camYaw = camYawRef.current;
 
-    // Keyboard rotation (A/D still work as fallback)
+    // Keyboard camera orbit (A/D rotate camera, not character)
     if (keys.has('a') || keys.has('arrowleft')) {
-      pos.ry += ROTATE_SPEED * delta;
+      camYawRef.current -= ROTATE_SPEED * delta;
     }
     if (keys.has('d') || keys.has('arrowright')) {
-      pos.ry -= ROTATE_SPEED * delta;
+      camYawRef.current += ROTATE_SPEED * delta;
     }
 
-    // Movement (relative to facing direction)
+    // Movement input (relative to CAMERA direction, not character facing)
     let moveX = 0;
     let moveZ = 0;
     if (keys.has('w') || keys.has('arrowup')) {
@@ -280,7 +282,6 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     if (keys.has('s') || keys.has('arrowdown')) {
       moveZ += 1;
     }
-    // Strafe with Q/E
     if (keys.has('q')) {
       moveX -= 1;
     }
@@ -293,10 +294,21 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
       moveX /= len;
       moveZ /= len;
 
-      const sin = Math.sin(pos.ry);
-      const cos = Math.cos(pos.ry);
-      pos.x += (moveX * cos - moveZ * sin) * MOVE_SPEED * delta;
-      pos.z += (moveX * sin + moveZ * cos) * MOVE_SPEED * delta;
+      // Resolve movement relative to camera yaw (not character facing)
+      const sin = Math.sin(camYaw);
+      const cos = Math.cos(camYaw);
+      const worldX = (moveX * cos - moveZ * sin) * MOVE_SPEED * delta;
+      const worldZ = (moveX * sin + moveZ * cos) * MOVE_SPEED * delta;
+      pos.x += worldX;
+      pos.z += worldZ;
+
+      // Character faces the movement direction (smooth turn)
+      const targetRy = Math.atan2(worldX, -worldZ);
+      let diff = targetRy - pos.ry;
+      // Normalize to [-PI, PI]
+      if (diff > Math.PI) diff -= Math.PI * 2;
+      if (diff < -Math.PI) diff += Math.PI * 2;
+      pos.ry += diff * 0.15; // smooth rotation
     }
 
     // Clamp to terrain bounds
@@ -304,18 +316,18 @@ function LocalPlayer({ avatar, onPositionUpdate }: LocalPlayerProps) {
     pos.x = Math.max(-half, Math.min(half, pos.x));
     pos.z = Math.max(-half, Math.min(half, pos.z));
 
-    // Apply to group (character only rotates on Y)
+    // Apply position + facing to character mesh
     groupRef.current.position.set(pos.x, pos.y, pos.z);
     groupRef.current.rotation.y = pos.ry;
 
-    // Camera follow (third-person, behind and above player, respecting pitch)
-    const pitch = pitchRef.current;
+    // Camera orbits around character using camYaw/camPitch
+    const pitch = camPitchRef.current;
     const camDist = CAMERA_DISTANCE * Math.cos(pitch);
     const camHeight = CAMERA_HEIGHT + CAMERA_DISTANCE * Math.sin(pitch);
     const targetCamPos = new THREE.Vector3(
-      pos.x - Math.sin(pos.ry) * camDist,
+      pos.x - Math.sin(camYaw) * camDist,
       pos.y + camHeight,
-      pos.z + Math.cos(pos.ry) * camDist,
+      pos.z + Math.cos(camYaw) * camDist,
     );
     camera.position.lerp(targetCamPos, CAMERA_LERP);
     camera.lookAt(pos.x, pos.y + 1.5, pos.z);
@@ -528,8 +540,8 @@ export function SceneViewer({
 
       {/* Controls hint overlay */}
       <div className="absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/70 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none select-none space-y-0.5">
-        <div><span className="font-mono">W A S D</span> move &middot; <span className="font-mono">Q E</span> strafe</div>
-        <div>Right-click drag to look around</div>
+        <div><span className="font-mono">W S</span> move &middot; <span className="font-mono">Q E</span> strafe &middot; <span className="font-mono">A D</span> rotate</div>
+        <div>Right-click drag to orbit camera</div>
       </div>
     </div>
   );
