@@ -192,10 +192,24 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
       }
     };
 
-    // Wire up peer connection changes
+    // Wire up peer connection changes: when a peer disconnects (close tab, network drop, etc.),
+    // remove them from peerStates so they disappear from the map.
     manager.onPeerChange = (peers) => {
       debugLog('peer change connected:', peers.length, peers.map((p) => p.slice(0, 8) + '…'));
       setConnectedCount(peers.length);
+      const connectedSet = new Set(peers);
+      let changed = false;
+      const next = { ...peerStatesRef.current };
+      for (const pubkey of Object.keys(next)) {
+        if (!connectedSet.has(pubkey)) {
+          delete next[pubkey];
+          changed = true;
+        }
+      }
+      if (changed) {
+        peerStatesRef.current = next;
+        setPeerStates(next);
+      }
     };
 
     // Periodic state flush (position updates are high-frequency, batch React setState)
@@ -391,8 +405,23 @@ export function useWebRTC({ scenePubkey, sceneDTag, enabled = true }: UseWebRTCO
   }, []);
 
   const broadcastChat = useCallback((text: string) => {
-    managerRef.current?.broadcast({ type: 'chat', text });
-  }, []);
+    const manager = managerRef.current;
+    if (!user) return;
+    manager?.broadcast({ type: 'chat', text });
+    // Show own message above our head (we don't receive our own broadcast)
+    const list = liveChatRef.current;
+    const now = Date.now();
+    const entry: LiveChatMessage = {
+      id: `live-me-${now}-${list.length}`,
+      pubkey: user.pubkey,
+      content: text,
+      createdAt: Math.floor(now / 1000),
+    };
+    list.push(entry);
+    if (list.length > MAX_LIVE_CHAT) list.shift();
+    liveChatRef.current = list;
+    setLiveChatMessages([...list]);
+  }, [user]);
 
   const sendPrivateChat = useCallback((peerPubkey: string, text: string) => {
     const manager = managerRef.current;

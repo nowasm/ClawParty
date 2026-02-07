@@ -428,7 +428,7 @@ function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji }: Lo
       {/* Emoji bubble above local player */}
       {emoji && (
         <Html position={[0, LABEL_BASE_Y + 0.5 + activeBubbles.length * BUBBLE_OFFSET_Y, 0]} center distanceFactor={BUBBLE_DISTANCE_FACTOR}>
-          <div className="text-3xl animate-bounce" style={{ animationDuration: '0.6s' }}>
+          <div className="text-6xl animate-bounce" style={{ animationDuration: '0.6s' }}>
             {emoji}
           </div>
         </Html>
@@ -546,7 +546,7 @@ function RemotePlayer({ pubkey, avatar, peerState, speechBubbles = [] }: RemoteP
       {/* Emoji bubble (above speech bubbles) */}
       {peerState.emoji && (
         <Html position={[0, emojiY, 0]} center distanceFactor={BUBBLE_DISTANCE_FACTOR}>
-          <div className="text-3xl animate-bounce" style={{ animationDuration: '0.6s' }}>
+          <div className="text-6xl animate-bounce" style={{ animationDuration: '0.6s' }}>
             {peerState.emoji}
           </div>
         </Html>
