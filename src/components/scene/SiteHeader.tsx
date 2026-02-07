@@ -100,23 +100,20 @@ export function SiteHeader() {
           {currentUser ? (
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 px-2 py-1.5 rounded-full hover:bg-accent transition-all text-foreground">
+                <button className="flex items-center gap-2 px-2 py-1.5 rounded-full hover:bg-accent transition-all text-foreground" title={getDisplayName(currentUser)}>
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={currentUser.metadata.picture} alt={getDisplayName(currentUser)} />
                     <AvatarFallback className="text-xs">
                       {getDisplayName(currentUser).slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="text-sm font-medium hidden md:inline truncate max-w-[100px]">
-                    {getDisplayName(currentUser)}
-                  </span>
                   <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="end" className="w-56 p-2">
-                {/* User info header */}
-                <div className="px-2 py-2 mb-1">
+                {/* User info (name once, then pubkey) */}
+                <div className="px-2 py-2 mb-1 space-y-0.5">
                   <p className="text-sm font-semibold truncate">{getDisplayName(currentUser)}</p>
                   <p className="text-xs text-muted-foreground font-mono truncate">
                     {currentUser.pubkey.slice(0, 16)}...

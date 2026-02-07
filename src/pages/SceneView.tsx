@@ -144,6 +144,9 @@ const SceneView = () => {
 
   const handleEmoji = useCallback((emoji: string) => {
     broadcastEmoji(emoji);
+    // Show emoji and play action on local player (same as remote peers see)
+    const showLocalEmoji = (SceneViewer as unknown as { _showEmoji?: (emoji: string) => void })._showEmoji;
+    showLocalEmoji?.(emoji);
   }, [broadcastEmoji]);
 
   const metadata = author.data?.metadata;

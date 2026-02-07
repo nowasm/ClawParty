@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, Smile, MessageCircle, Users, MessageSquare, ChevronUp, ChevronDown, Hash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useSceneChat, useSendSceneChat, type ChatMessage } from '@/hooks/useSceneChat';
@@ -69,7 +69,7 @@ function toChatMessage(m: LiveChatMessage): ChatMessage {
 
 /** Sidebar item for a peer with unread indicator */
 function PeerSidebarItem({
-  pubkey,
+  pubkey: _pubkey,
   displayName,
   isSelected,
   hasUnread,
@@ -131,6 +131,9 @@ export function SceneChat({
   const [chatMode, setChatMode] = useState<ChatMode>('public');
   const [selectedPeerPubkey, setSelectedPeerPubkey] = useState<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const isCollapsedRef = useRef(isCollapsed);
+  isCollapsedRef.current = isCollapsed;
   const { user } = useCurrentUser();
   const { data: messages = [], isLoading } = useSceneChat(scenePubkey, sceneDTag);
   const { sendMessage, isPending } = useSendSceneChat();
@@ -195,12 +198,28 @@ export function SceneChat({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  /** In input: Enter = send, Ctrl+Enter = newline */
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Enter') return;
+    if (e.ctrlKey) return; // allow default: insert newline
+    e.preventDefault();
+    handleSend();
   };
+
+  // Global Enter: focus chat input (expand panel if collapsed). Skip when focus is in any input/textarea.
+  useEffect(() => {
+    const onDocKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter') return;
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || (active as HTMLElement)?.isContentEditable) return;
+      if (inputRef.current && (active === inputRef.current || inputRef.current.contains(active as Node))) return;
+      e.preventDefault();
+      if (isCollapsedRef.current) setIsCollapsed(false);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    };
+    document.addEventListener('keydown', onDocKey);
+    return () => document.removeEventListener('keydown', onDocKey);
+  }, []);
 
   const handleEmojiSelect = (emoji: string) => {
     setInput((prev) => prev + emoji);
@@ -409,7 +428,8 @@ export function SceneChat({
                   </div>
                 </PopoverContent>
               </Popover>
-              <Input
+              <Textarea
+                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -417,10 +437,11 @@ export function SceneChat({
                   chatMode === 'private' && !selectedPeerPubkey
                     ? '请先选择私聊对象'
                     : chatMode === 'private'
-                      ? `发消息给 ${selectedPeerName}...`
-                      : '发送消息...'
+                      ? `发消息给 ${selectedPeerName}... (Enter 发送, Ctrl+Enter 换行)`
+                      : '按 Enter 发送，Ctrl+Enter 换行'
                 }
-                className="h-7 text-xs bg-black/10 border-border/30"
+                rows={1}
+                className="min-h-7 max-h-24 resize-none py-1.5 text-xs bg-black/10 border-border/30 focus-visible:ring-1"
                 disabled={chatMode === 'public' ? isPending : false}
               />
               <Button
