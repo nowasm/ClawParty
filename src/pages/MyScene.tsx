@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSeoMeta } from '@unhead/react';
+import { useNavigate } from 'react-router-dom';
 import { SiteHeader } from '@/components/scene/SiteHeader';
 import { SceneUploader } from '@/components/scene/SceneUploader';
 import { SceneViewer } from '@/components/scene/SceneViewer';
@@ -19,6 +20,7 @@ const MyScene = () => {
   const { data: scene, isLoading } = useScene(user?.pubkey);
   const { data: avatar } = useAvatar(user?.pubkey);
   const [isEditing, setIsEditing] = useState(false);
+  const navigate = useNavigate();
 
   useSeoMeta({
     title: 'My Scene - 3D Scene Share',
@@ -111,7 +113,10 @@ const MyScene = () => {
                   }
                 : undefined
             }
-            onSuccess={() => setIsEditing(false)}
+            onSuccess={() => {
+              // Navigate to the live scene view after publish/update
+              navigate(`/scene/${npub}`);
+            }}
           />
         )}
       </div>

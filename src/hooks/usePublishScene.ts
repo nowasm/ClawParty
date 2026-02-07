@@ -1,6 +1,6 @@
+import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { SCENE_TAG, DEFAULT_RELAY_URLS } from '@/lib/scene';
 
@@ -14,49 +14,57 @@ interface PublishSceneParams {
 
 /**
  * Publish or update the current user's 3D scene (kind 30311).
- * Always broadcasts to the default relays so all clients can discover the scene.
+ * Signs the event with the user's signer and publishes directly
+ * to the default relay group, ensuring discoverability for all clients.
  */
 export function usePublishScene() {
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent, isPending } = useNostrPublish();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
   const publishScene = async (params: PublishSceneParams) => {
     if (!user) throw new Error('Must be logged in to publish a scene');
 
-    const tags: string[][] = [
-      ['d', params.dTag],
-      ['title', params.title],
-      ['summary', params.summary],
-      ['image', params.imageUrl],
-      ['streaming', params.sceneUrl],
-      ['t', SCENE_TAG],
-      ['status', 'live'],
-      ['p', user.pubkey, '', 'Host'],
-    ];
-
-    // Publish to user's configured relays
-    const event = await publishEvent({
-      kind: 30311,
-      content: '',
-      tags,
-    });
-
-    // Also broadcast to all default relays so that anonymous visitors
-    // (using the default relay list) can always discover the scene.
-    const defaultGroup = nostr.group(DEFAULT_RELAY_URLS);
+    setIsPending(true);
     try {
-      await defaultGroup.event(event, { signal: AbortSignal.timeout(8000) });
-    } catch (err) {
-      // Non-fatal: the event was already published to user's relays
-      console.warn('Failed to broadcast scene to some default relays:', err);
+      const tags: string[][] = [
+        ['d', params.dTag],
+        ['title', params.title],
+        ['summary', params.summary],
+        ['image', params.imageUrl],
+        ['streaming', params.sceneUrl],
+        ['t', SCENE_TAG],
+        ['status', 'live'],
+        ['p', user.pubkey, '', 'Host'],
+      ];
+
+      // Sign the event
+      const event = await user.signer.signEvent({
+        kind: 30311,
+        content: '',
+        tags,
+        created_at: Math.floor(Date.now() / 1000),
+      });
+
+      // Publish to default relays first (primary — ensures all clients can find it)
+      const defaultGroup = nostr.group(DEFAULT_RELAY_URLS);
+      await defaultGroup.event(event, { signal: AbortSignal.timeout(10000) });
+
+      // Also publish to user's configured relays (best-effort)
+      try {
+        await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+      } catch (err) {
+        console.warn('Failed to broadcast to user relays (non-fatal):', err);
+      }
+
+      // Invalidate scene queries to refresh lists
+      queryClient.invalidateQueries({ queryKey: ['scenes'] });
+
+      return event;
+    } finally {
+      setIsPending(false);
     }
-
-    // Invalidate scene queries to refresh lists
-    queryClient.invalidateQueries({ queryKey: ['scenes'] });
-
-    return event;
   };
 
   return { publishScene, isPending };
