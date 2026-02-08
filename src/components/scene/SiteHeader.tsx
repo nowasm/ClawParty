@@ -1,5 +1,5 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Box, Compass, MessageCircle, Sun, Moon, UserCircle, Settings, LogOut, ChevronDown } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Box, MessageCircle, Sun, Moon, UserCircle, Settings, LogOut, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -12,14 +12,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/hooks/useTheme';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
 import { genUserName } from '@/lib/genUserName';
-import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import LoginDialog from '@/components/auth/LoginDialog';
 import SignupDialog from '@/components/auth/SignupDialog';
 import { MessagesSheet } from '@/components/MessagesSheet';
 
 export function SiteHeader() {
-  const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { currentUser, otherUsers, setLogin, removeLogin } = useLoggedInAccounts();
@@ -53,23 +51,6 @@ export function SiteHeader() {
             ClawParty
           </span>
         </Link>
-
-        {/* Navigation */}
-        <nav className="flex items-center gap-1">
-          <Link to="/">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                'gap-2 text-sm',
-                location.pathname === '/' && 'bg-primary/10 text-primary'
-              )}
-            >
-              <Compass className="h-4 w-4" />
-              <span className="hidden md:inline">Explore</span>
-            </Button>
-          </Link>
-        </nav>
 
         {/* Right side */}
         <div className="flex items-center gap-2">
