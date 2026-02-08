@@ -194,12 +194,16 @@ export class MultiSyncManager {
   }
 
   /**
-   * Send a client message to ALL connected servers.
+   * Send a client message to ALL fully-connected (authenticated) servers.
    * This ensures every server has complete state for redundancy.
+   * Messages are NOT sent to servers still in the connecting/authenticating
+   * phase, which avoids "Not authenticated" errors from the server.
    */
   send(msg: ClientMessage): void {
     for (const conn of this.connections.values()) {
-      conn.manager.send(msg);
+      if (conn.state === 'connected') {
+        conn.manager.send(msg);
+      }
     }
   }
 

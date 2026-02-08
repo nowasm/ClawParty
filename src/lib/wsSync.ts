@@ -153,6 +153,8 @@ export class SceneSyncManager {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private pongTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
+  /** Set when server sends REPLACED — prevents reconnect loops */
+  private replaced = false;
 
   private _state: ConnectionState = 'disconnected';
 
@@ -176,6 +178,10 @@ export class SceneSyncManager {
   connect(): void {
     if (this.destroyed) return;
     if (this.ws) return; // already connecting/connected
+
+    // Reset replaced flag — explicit connect() call means we intentionally
+    // want to establish a new connection (e.g. from MultiSyncManager).
+    this.replaced = false;
 
     this.setState('connecting');
     debugLog('connecting to', this.syncUrl);
@@ -221,6 +227,12 @@ export class SceneSyncManager {
       if (msg.type === 'pong') {
         this.clearPongTimeout();
         return;
+      }
+
+      // If the server replaced us (another connection with same pubkey),
+      // mark as replaced so we don't auto-reconnect and cause a loop.
+      if (msg.type === 'error' && msg.code === 'REPLACED') {
+        this.replaced = true;
       }
 
       this.onMessage?.(msg);
@@ -329,6 +341,14 @@ export class SceneSyncManager {
 
   private scheduleReconnect(): void {
     if (this.destroyed) return;
+    // Don't reconnect if we were replaced by another connection with the
+    // same pubkey — reconnecting would just replace that connection in
+    // turn, causing an infinite reconnect loop.
+    if (this.replaced) {
+      debugLog('not reconnecting — replaced by another connection');
+      this.onMessage?.({ type: 'error', message: 'Connection replaced by another session', code: 'REPLACED' });
+      return;
+    }
     const delay = Math.min(
       RECONNECT_MIN_MS * Math.pow(2, this.reconnectAttempts),
       RECONNECT_MAX_MS,
