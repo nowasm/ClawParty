@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
 import { ArrowLeft, Users, Wifi, WifiOff, Loader2 } from 'lucide-react';
@@ -25,6 +25,7 @@ import { useCallback, useMemo, useEffect, useRef, useState } from 'react';
 
 const SceneView = () => {
   const { npub } = useParams<{ npub: string }>();
+  const [searchParams] = useSearchParams();
   const { user } = useCurrentUser();
 
   // Decode npub to hex pubkey
@@ -62,6 +63,17 @@ const SceneView = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pubkey]);
 
+  // Allow overriding sync URLs via ?sync= query parameter (useful for local dev)
+  const effectiveSyncUrls = useMemo(() => {
+    const overrideSync = searchParams.get('sync');
+    if (overrideSync) {
+      // Override takes priority; merge with scene sync URLs to avoid duplicates
+      const urls = new Set([overrideSync, ...(scene?.syncUrls ?? [])]);
+      return Array.from(urls);
+    }
+    return scene?.syncUrls ?? [];
+  }, [searchParams, scene?.syncUrls]);
+
   // WebSocket sync (connects to AI-hosted sync server)
   const {
     peerStates,
@@ -76,7 +88,7 @@ const SceneView = () => {
     connectionState,
     serverConnections,
   } = useSceneSync({
-    syncUrls: scene?.syncUrls,
+    syncUrls: effectiveSyncUrls,
     enabled: !!user && !!pubkey,
   });
 

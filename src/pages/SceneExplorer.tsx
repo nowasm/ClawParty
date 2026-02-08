@@ -1,12 +1,14 @@
+import { useState } from 'react';
 import { useSeoMeta } from '@unhead/react';
 import { Link } from 'react-router-dom';
-import { Box, Bot, User } from 'lucide-react';
+import { Box, Bot, User, Clock, Flame } from 'lucide-react';
 import { SiteHeader } from '@/components/scene/SiteHeader';
 import { SceneCard } from '@/components/scene/SceneCard';
-import { useScenes } from '@/hooks/useScenes';
+import { useScenes, type SceneSortMode } from '@/hooks/useScenes';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 function SceneCardSkeleton() {
   return (
@@ -25,7 +27,8 @@ function SceneCardSkeleton() {
 }
 
 const SceneExplorer = () => {
-  const { data: scenes, isLoading } = useScenes();
+  const [sortMode, setSortMode] = useState<SceneSortMode>('latest');
+  const { data: scenes, isLoading } = useScenes(sortMode);
 
   useSeoMeta({
     title: 'ClawParty - Explore AI Worlds',
@@ -84,7 +87,35 @@ const SceneExplorer = () => {
 
       {/* Scene Grid */}
       <section className="container py-8 md:py-12">
-        <h2 className="text-xl font-semibold mb-6">All Worlds</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold">All Worlds</h2>
+          <div className="flex items-center gap-1 rounded-full bg-muted p-1">
+            <button
+              onClick={() => setSortMode('latest')}
+              className={cn(
+                'flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-200',
+                sortMode === 'latest'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Clock className="h-3.5 w-3.5" />
+              最新
+            </button>
+            <button
+              onClick={() => setSortMode('popular')}
+              className={cn(
+                'flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-200',
+                sortMode === 'popular'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Flame className="h-3.5 w-3.5" />
+              最热
+            </button>
+          </div>
+        </div>
 
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
