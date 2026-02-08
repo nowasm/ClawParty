@@ -3,13 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
-import { Globe, Users, Server, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import {
+  Globe, Users, Server, ZoomIn, ZoomOut, Maximize2,
+  Flame, Clock, ArrowRight, Map as MapIcon, Zap, Crown,
+} from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { SiteHeader } from '@/components/scene/SiteHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { GRID_COLS, GRID_ROWS, toMapId, toMapCoords, getDefaultPreset } from '@/lib/mapRegistry';
 
@@ -22,19 +27,47 @@ interface MapCellInfo {
   syncNodes: number;
   players: number;
   hasServers: boolean;
+  /** Latest heartbeat timestamp for this map */
+  lastSeen: number;
+}
+
+/** A ranked map for display in the leaderboard cards */
+interface RankedMap extends MapCellInfo {
+  x: number;
+  y: number;
+  preset: string;
+  rank: number;
 }
 
 // ============================================================================
 // Preset colors for visual variety
 // ============================================================================
 
-const PRESET_COLORS: Record<string, { bg: string; border: string; label: string }> = {
-  '': { bg: 'bg-green-500/20', border: 'border-green-500/30', label: 'Plains' },
-  '__preset__desert': { bg: 'bg-amber-500/20', border: 'border-amber-500/30', label: 'Desert' },
-  '__preset__snow': { bg: 'bg-sky-300/20', border: 'border-sky-300/30', label: 'Snow' },
-  '__preset__lava': { bg: 'bg-red-500/20', border: 'border-red-500/30', label: 'Lava' },
-  '__preset__ocean': { bg: 'bg-blue-500/20', border: 'border-blue-500/30', label: 'Ocean' },
-  '__preset__night': { bg: 'bg-indigo-500/20', border: 'border-indigo-500/30', label: 'Night' },
+const PRESET_COLORS: Record<string, { bg: string; border: string; label: string; gradient: string; icon: string }> = {
+  '': {
+    bg: 'bg-green-500/20', border: 'border-green-500/30', label: 'Plains',
+    gradient: 'from-green-500/30 to-emerald-600/10', icon: 'text-green-500',
+  },
+  '__preset__desert': {
+    bg: 'bg-amber-500/20', border: 'border-amber-500/30', label: 'Desert',
+    gradient: 'from-amber-500/30 to-orange-600/10', icon: 'text-amber-500',
+  },
+  '__preset__snow': {
+    bg: 'bg-sky-300/20', border: 'border-sky-300/30', label: 'Snow',
+    gradient: 'from-sky-300/30 to-blue-400/10', icon: 'text-sky-400',
+  },
+  '__preset__lava': {
+    bg: 'bg-red-500/20', border: 'border-red-500/30', label: 'Lava',
+    gradient: 'from-red-500/30 to-orange-700/10', icon: 'text-red-500',
+  },
+  '__preset__ocean': {
+    bg: 'bg-blue-500/20', border: 'border-blue-500/30', label: 'Ocean',
+    gradient: 'from-blue-500/30 to-cyan-600/10', icon: 'text-blue-500',
+  },
+  '__preset__night': {
+    bg: 'bg-indigo-500/20', border: 'border-indigo-500/30', label: 'Night',
+    gradient: 'from-indigo-500/30 to-violet-600/10', icon: 'text-indigo-400',
+  },
 };
 
 // ============================================================================
@@ -94,11 +127,13 @@ function useWorldMapData() {
             syncNodes: 0,
             players: 0,
             hasServers: false,
+            lastSeen: 0,
           };
 
           existing.syncNodes += 1;
           existing.players += isNaN(playerCount) ? 0 : playerCount;
           existing.hasServers = true;
+          existing.lastSeen = Math.max(existing.lastSeen, event.created_at);
           mapData.set(mapId, existing);
         }
 
@@ -109,15 +144,175 @@ function useWorldMapData() {
         }
       }
 
+      // Build ranked lists
+      const allActive = Array.from(mapData.values()).filter((m) => m.hasServers);
+
+      // Hot maps: sorted by player count descending
+      const hotMaps: RankedMap[] = [...allActive]
+        .sort((a, b) => b.players - a.players || b.syncNodes - a.syncNodes)
+        .slice(0, 12)
+        .map((m, i) => {
+          const coords = toMapCoords(m.mapId);
+          return { ...m, ...coords, preset: getDefaultPreset(m.mapId), rank: i + 1 };
+        });
+
+      // Recent maps: sorted by lastSeen descending (most recently active first)
+      const recentMaps: RankedMap[] = [...allActive]
+        .sort((a, b) => b.lastSeen - a.lastSeen)
+        .slice(0, 12)
+        .map((m, i) => {
+          const coords = toMapCoords(m.mapId);
+          return { ...m, ...coords, preset: getDefaultPreset(m.mapId), rank: i + 1 };
+        });
+
       return {
         mapData,
+        hotMaps,
+        recentMaps,
         totalServers: latestByServer.size,
-        totalPlayers: Array.from(mapData.values()).reduce((sum, m) => sum + m.players, 0),
+        totalPlayers: allActive.reduce((sum, m) => sum + m.players, 0),
       };
     },
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+}
+
+// ============================================================================
+// Time-ago helper
+// ============================================================================
+
+function timeAgo(timestamp: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = now - timestamp;
+  if (diff < 60) return 'just now';
+  if (diff < 120) return '1 min ago';
+  if (diff < 3600) return `${Math.floor(diff / 60)} mins ago`;
+  if (diff < 7200) return '1 hour ago';
+  return `${Math.floor(diff / 3600)} hours ago`;
+}
+
+// ============================================================================
+// MapRankCard component — visually rich card for each ranked map
+// ============================================================================
+
+function MapRankCard({
+  map,
+  mode,
+  onClick,
+}: {
+  map: RankedMap;
+  mode: 'hot' | 'recent';
+  onClick: () => void;
+}) {
+  const presetStyle = PRESET_COLORS[map.preset] ?? PRESET_COLORS[''];
+  const isTop3 = map.rank <= 3;
+  const medalColors = ['', 'text-yellow-500', 'text-slate-400', 'text-amber-700'];
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'group relative flex flex-col overflow-hidden rounded-xl border transition-all duration-300',
+        'hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 hover:border-primary/40',
+        'bg-card text-left w-full',
+        isTop3 && 'ring-1 ring-primary/20',
+      )}
+    >
+      {/* Top gradient bar */}
+      <div className={cn('h-1.5 w-full bg-gradient-to-r', presetStyle.gradient)} />
+
+      {/* Card body */}
+      <div className="flex items-start gap-3 p-4">
+        {/* Rank badge */}
+        <div className={cn(
+          'flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg font-bold text-sm',
+          isTop3
+            ? 'bg-primary/10 text-primary'
+            : 'bg-muted text-muted-foreground',
+        )}>
+          {isTop3 ? (
+            <Crown className={cn('h-5 w-5', medalColors[map.rank])} />
+          ) : (
+            <span>#{map.rank}</span>
+          )}
+        </div>
+
+        {/* Map info */}
+        <div className="flex-1 min-w-0 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm truncate">
+              Map #{map.mapId}
+            </span>
+            <Badge variant="secondary" className={cn('text-[10px] px-1.5 py-0 h-4', presetStyle.icon)}>
+              {presetStyle.label}
+            </Badge>
+          </div>
+
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <MapIcon className="h-3 w-3" />
+            <span>({map.x}, {map.y})</span>
+          </div>
+
+          {/* Stats row */}
+          <div className="flex items-center gap-3 pt-1">
+            {map.players > 0 && (
+              <div className="flex items-center gap-1">
+                <div className="relative">
+                  <Users className="h-3.5 w-3.5 text-primary" />
+                  {mode === 'hot' && map.players >= 3 && (
+                    <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                  )}
+                </div>
+                <span className="text-xs font-medium text-primary">
+                  {map.players}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
+              <Zap className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="text-xs text-muted-foreground">
+                {map.syncNodes} node{map.syncNodes !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {mode === 'recent' && (
+              <div className="flex items-center gap-1">
+                <Clock className="h-3 w-3 text-muted-foreground" />
+                <span className="text-[11px] text-muted-foreground">
+                  {timeAgo(map.lastSeen)}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Enter arrow */}
+        <div className="flex-shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <ArrowRight className="h-4 w-4 text-primary" />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ============================================================================
+// MapRankSkeleton — loading skeleton for rank cards
+// ============================================================================
+
+function MapRankSkeleton() {
+  return (
+    <div className="rounded-xl border bg-card overflow-hidden">
+      <Skeleton className="h-1.5 w-full" />
+      <div className="flex items-start gap-3 p-4">
+        <Skeleton className="w-9 h-9 rounded-lg flex-shrink-0" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-32" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ============================================================================
@@ -133,6 +328,7 @@ const WorldMap = () => {
   const [viewOffset, setViewOffset] = useState({ x: 40, y: 40 }); // Center of grid
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredCell, setHoveredCell] = useState<number | null>(null);
+  const [rankTab, setRankTab] = useState<'hot' | 'recent'>('hot');
   const dragStart = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -186,6 +382,11 @@ const WorldMap = () => {
     navigate(`/map/${mapId}`);
   }, [navigate, isDragging]);
 
+  // Navigate to a map
+  const handleMapCardClick = useCallback((mapId: number) => {
+    navigate(`/map/${mapId}`);
+  }, [navigate]);
+
   // Drag to pan
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -228,6 +429,12 @@ const WorldMap = () => {
   const totalPlayers = worldData?.totalPlayers ?? 0;
   const activeMaps = worldData?.mapData.size ?? 0;
 
+  // Ranked maps
+  const hotMaps = worldData?.hotMaps ?? [];
+  const recentMaps = worldData?.recentMaps ?? [];
+  const displayedMaps = rankTab === 'hot' ? hotMaps : recentMaps;
+  const hasRankedMaps = hotMaps.length > 0 || recentMaps.length > 0;
+
   // Hovered cell info
   const hoveredInfo = hoveredCell !== null ? cells.find((c) => c.mapId === hoveredCell) : null;
 
@@ -254,7 +461,7 @@ const WorldMap = () => {
           />
         </div>
 
-        <div className="container py-12 md:py-16">
+        <div className="container py-10 md:py-14">
           <div className="mx-auto max-w-3xl text-center space-y-4">
             <div className="flex items-center justify-center gap-3 mb-2">
               <div className="relative">
@@ -266,18 +473,18 @@ const WorldMap = () => {
               World Map
             </h1>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              10,000 maps in a 100x100 grid. Click any map to enter and explore.
+              10,000 maps in a 100x100 grid. Find the hottest maps and jump right in.
             </p>
 
             {/* Stats */}
-            <div className="flex items-center justify-center gap-4 pt-2">
+            <div className="flex items-center justify-center gap-3 md:gap-4 pt-2 flex-wrap">
               <Badge variant="outline" className="gap-1.5 px-3 py-1.5">
                 <Server className="h-3.5 w-3.5" />
                 {totalServers} sync nodes
               </Badge>
               <Badge variant="outline" className="gap-1.5 px-3 py-1.5">
                 <Users className="h-3.5 w-3.5" />
-                {totalPlayers} players
+                {totalPlayers} players online
               </Badge>
               <Badge variant="outline" className="gap-1.5 px-3 py-1.5">
                 <Globe className="h-3.5 w-3.5" />
@@ -288,154 +495,248 @@ const WorldMap = () => {
         </div>
       </section>
 
-      {/* World map grid */}
-      <section className="container py-6 md:py-8">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm text-muted-foreground">
-            Showing {visibleCells}x{visibleCells} cells
-            {hoveredInfo && (
-              <span className="ml-3 text-foreground">
-                Map #{hoveredInfo.mapId} ({hoveredInfo.x}, {hoveredInfo.y})
-                {hoveredInfo.info && (
-                  <> &middot; {hoveredInfo.info.players} players &middot; {hoveredInfo.info.syncNodes} nodes</>
+      {/* ================================================================== */}
+      {/* MAP RANKINGS — Hot & Recent */}
+      {/* ================================================================== */}
+      <section className="container py-8 md:py-10">
+        <div className="space-y-6">
+          {/* Section header with tabs */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-1">
+              <h2 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2.5">
+                {rankTab === 'hot' ? (
+                  <>
+                    <Flame className="h-6 w-6 text-orange-500" />
+                    Hottest Maps
+                  </>
+                ) : (
+                  <>
+                    <Clock className="h-6 w-6 text-blue-500" />
+                    Recently Active
+                  </>
                 )}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={zoomIn}
-                    disabled={zoomIndex === 0}
-                  >
-                    <ZoomIn className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Zoom in</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={zoomOut}
-                    disabled={zoomIndex === ZOOM_LEVELS.length - 1}
-                  >
-                    <ZoomOut className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Zoom out</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={resetView}
-                  >
-                    <Maximize2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Reset view</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        </div>
-
-        {/* Grid */}
-        <Card className="overflow-hidden">
-          <CardContent className="p-2">
-            {isLoading ? (
-              <div className="aspect-square flex items-center justify-center">
-                <div className="text-muted-foreground animate-pulse">Loading world data...</div>
-              </div>
-            ) : (
-              <div
-                ref={gridRef}
-                className="aspect-square select-none cursor-grab active:cursor-grabbing"
-                onMouseDown={handleMouseDown}
-              >
-                <div
-                  className="grid gap-px h-full"
-                  style={{
-                    gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
-                  }}
-                >
-                  {cells.map((cell) => {
-                    const presetStyle = PRESET_COLORS[cell.preset] ?? PRESET_COLORS[''];
-                    const hasActivity = cell.info && (cell.info.players > 0 || cell.info.syncNodes > 0);
-
-                    return (
-                      <button
-                        key={cell.mapId}
-                        className={cn(
-                          'relative rounded-[2px] transition-all duration-150',
-                          'hover:ring-2 hover:ring-primary hover:z-10 hover:scale-110',
-                          presetStyle.bg,
-                          hasActivity && 'ring-1',
-                          hasActivity && presetStyle.border,
-                          hoveredCell === cell.mapId && 'ring-2 ring-primary z-10',
-                        )}
-                        onClick={() => handleCellClick(cell.mapId)}
-                        onMouseEnter={() => setHoveredCell(cell.mapId)}
-                        onMouseLeave={() => setHoveredCell(null)}
-                        title={`Map #${cell.mapId} (${cell.x}, ${cell.y}) - ${presetStyle.label}`}
-                      >
-                        {/* Player indicator dot */}
-                        {cell.info && cell.info.players > 0 && visibleCells <= 50 && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-2 h-2 bg-primary rounded-full animate-pulse shadow-lg shadow-primary/50" />
-                          </div>
-                        )}
-                        {/* Server indicator (tiny corner dot) */}
-                        {cell.info && cell.info.syncNodes > 0 && cell.info.players === 0 && visibleCells <= 20 && (
-                          <div className="absolute top-0.5 right-0.5">
-                            <div className="w-1 h-1 bg-emerald-500 rounded-full" />
-                          </div>
-                        )}
-                        {/* Cell label at highest zoom */}
-                        {visibleCells <= 10 && (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center text-[9px] text-muted-foreground/70">
-                            <span>{cell.x},{cell.y}</span>
-                            {cell.info && cell.info.players > 0 && (
-                              <span className="text-primary font-medium">{cell.info.players}p</span>
-                            )}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Legend */}
-        <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-muted-foreground">
-          <span className="font-medium">Terrain:</span>
-          {Object.entries(PRESET_COLORS).map(([key, style]) => (
-            <div key={key || 'plains'} className="flex items-center gap-1.5">
-              <div className={cn('w-3 h-3 rounded-sm', style.bg, 'border', style.border)} />
-              <span>{style.label}</span>
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {rankTab === 'hot'
+                  ? 'Maps with the most players right now'
+                  : 'Maps that were recently active'}
+              </p>
             </div>
-          ))}
-          <span className="mx-2">|</span>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 bg-primary rounded-full" />
-            <span>Players online</span>
+
+            <Tabs value={rankTab} onValueChange={(v) => setRankTab(v as 'hot' | 'recent')}>
+              <TabsList className="grid grid-cols-2 w-52">
+                <TabsTrigger value="hot" className="gap-1.5 text-sm">
+                  <Flame className="h-3.5 w-3.5" />
+                  Hot
+                </TabsTrigger>
+                <TabsTrigger value="recent" className="gap-1.5 text-sm">
+                  <Clock className="h-3.5 w-3.5" />
+                  Recent
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-            <span>Sync node</span>
+
+          {/* Map cards grid */}
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <MapRankSkeleton key={i} />
+              ))}
+            </div>
+          ) : hasRankedMaps ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {displayedMaps.map((map) => (
+                <MapRankCard
+                  key={map.mapId}
+                  map={map}
+                  mode={rankTab}
+                  onClick={() => handleMapCardClick(map.mapId)}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card className="border-dashed">
+              <CardContent className="py-12 px-8 text-center">
+                <div className="max-w-sm mx-auto space-y-4">
+                  <div className="flex justify-center">
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                      <Globe className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                  </div>
+                  <p className="text-muted-foreground">
+                    No active maps yet. Start a sync server or wait for players to come online.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </section>
+
+      {/* Divider */}
+      <div className="container">
+        <div className="border-t border-border" />
+      </div>
+
+      {/* ================================================================== */}
+      {/* WORLD GRID MAP — full 100x100 zoomable grid */}
+      {/* ================================================================== */}
+      <section className="container py-8 md:py-10">
+        <div className="space-y-4">
+          {/* Section header + Toolbar */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h2 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2.5">
+                <MapIcon className="h-6 w-6 text-primary" />
+                World Grid
+              </h2>
+              <div className="text-sm text-muted-foreground">
+                Showing {visibleCells}x{visibleCells} cells
+                {hoveredInfo && (
+                  <span className="ml-3 text-foreground font-medium">
+                    Map #{hoveredInfo.mapId} ({hoveredInfo.x}, {hoveredInfo.y})
+                    {hoveredInfo.info && (
+                      <> &middot; {hoveredInfo.info.players} players &middot; {hoveredInfo.info.syncNodes} nodes</>
+                    )}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={zoomIn}
+                      disabled={zoomIndex === 0}
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Zoom in</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={zoomOut}
+                      disabled={zoomIndex === ZOOM_LEVELS.length - 1}
+                    >
+                      <ZoomOut className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Zoom out</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={resetView}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Reset view</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+
+          {/* Grid */}
+          <Card className="overflow-hidden">
+            <CardContent className="p-2">
+              {isLoading ? (
+                <div className="aspect-square flex items-center justify-center">
+                  <div className="text-muted-foreground animate-pulse">Loading world data...</div>
+                </div>
+              ) : (
+                <div
+                  ref={gridRef}
+                  className="aspect-square select-none cursor-grab active:cursor-grabbing"
+                  onMouseDown={handleMouseDown}
+                >
+                  <div
+                    className="grid gap-px h-full"
+                    style={{
+                      gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
+                    }}
+                  >
+                    {cells.map((cell) => {
+                      const presetStyle = PRESET_COLORS[cell.preset] ?? PRESET_COLORS[''];
+                      const hasActivity = cell.info && (cell.info.players > 0 || cell.info.syncNodes > 0);
+
+                      return (
+                        <button
+                          key={cell.mapId}
+                          className={cn(
+                            'relative rounded-[2px] transition-all duration-150',
+                            'hover:ring-2 hover:ring-primary hover:z-10 hover:scale-110',
+                            presetStyle.bg,
+                            hasActivity && 'ring-1',
+                            hasActivity && presetStyle.border,
+                            hoveredCell === cell.mapId && 'ring-2 ring-primary z-10',
+                          )}
+                          onClick={() => handleCellClick(cell.mapId)}
+                          onMouseEnter={() => setHoveredCell(cell.mapId)}
+                          onMouseLeave={() => setHoveredCell(null)}
+                          title={`Map #${cell.mapId} (${cell.x}, ${cell.y}) - ${presetStyle.label}`}
+                        >
+                          {/* Player indicator dot */}
+                          {cell.info && cell.info.players > 0 && visibleCells <= 50 && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-2 h-2 bg-primary rounded-full animate-pulse shadow-lg shadow-primary/50" />
+                            </div>
+                          )}
+                          {/* Server indicator (tiny corner dot) */}
+                          {cell.info && cell.info.syncNodes > 0 && cell.info.players === 0 && visibleCells <= 20 && (
+                            <div className="absolute top-0.5 right-0.5">
+                              <div className="w-1 h-1 bg-emerald-500 rounded-full" />
+                            </div>
+                          )}
+                          {/* Cell label at highest zoom */}
+                          {visibleCells <= 10 && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-[9px] text-muted-foreground/70">
+                              <span>{cell.x},{cell.y}</span>
+                              {cell.info && cell.info.players > 0 && (
+                                <span className="text-primary font-medium">{cell.info.players}p</span>
+                              )}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+            <span className="font-medium">Terrain:</span>
+            {Object.entries(PRESET_COLORS).map(([key, style]) => (
+              <div key={key || 'plains'} className="flex items-center gap-1.5">
+                <div className={cn('w-3 h-3 rounded-sm', style.bg, 'border', style.border)} />
+                <span>{style.label}</span>
+              </div>
+            ))}
+            <span className="mx-2">|</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 bg-primary rounded-full" />
+              <span>Players online</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+              <span>Sync node</span>
+            </div>
           </div>
         </div>
       </section>
