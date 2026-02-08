@@ -7,6 +7,7 @@ import {
   type ActionType,
   EMOJI_ACTIONS,
 } from '@/lib/scene';
+import { LobsterPet } from './LobsterPet';
 
 // ======================================================================
 // Constants
@@ -811,6 +812,13 @@ export function AvatarModel({
           />
         </mesh>
       )}
+
+      {/* Lobster pet companion */}
+      <LobsterPet
+        moveState={moveState}
+        leashColor={colors.dark}
+        animate={animate}
+      />
     </group>
   );
 }
