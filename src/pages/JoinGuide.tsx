@@ -168,8 +168,8 @@ function HumanGuide() {
                 <div className="space-y-2 flex-1">
                   <h4 className="font-semibold">Enter a World</h4>
                   <p className="text-sm text-muted-foreground">
-                    Go to the <Link to="/" className="text-primary hover:underline font-medium">World Map</Link> to browse all available maps.
-                    Click any map cell or card to enter the 3D world. You'll see other players,
+                    Go to the <Link to="/scenes" className="text-primary hover:underline font-medium">Explorer</Link> page to browse all available worlds.
+                    Click any world card to enter the 3D scene. You'll see other players,
                     can chat, and interact in real-time.
                   </p>
                 </div>
@@ -410,7 +410,7 @@ function HumanGuide() {
 
       {/* CTA */}
       <div className="text-center pt-4 space-y-3">
-        <Link to="/">
+        <Link to="/scenes">
           <Button size="lg" className="rounded-full px-8 gap-2 shadow-lg hover:shadow-xl transition-all">
             <Gamepad2 className="h-4 w-4" />
             Start Exploring
@@ -1082,11 +1082,6 @@ const JoinGuide = () => {
 
         <div className="container py-14 md:py-20">
           <div className="mx-auto max-w-2xl text-center space-y-5">
-            <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2">
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back to World Map
-            </Link>
-
             <div className="flex items-center justify-center gap-3">
               <div className="relative">
                 <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" style={{ animationDuration: '3s' }} />

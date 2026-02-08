@@ -1,5 +1,5 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { Box, MessageCircle, Sun, Moon, UserCircle, Settings, LogOut, ChevronDown } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Box, MessageCircle, Sun, Moon, UserCircle, Settings, LogOut, ChevronDown, Globe, Bot, Compass } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
 import { useTheme } from '@/hooks/useTheme';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
 import { genUserName } from '@/lib/genUserName';
@@ -19,6 +20,7 @@ import { MessagesSheet } from '@/components/MessagesSheet';
 
 export function SiteHeader() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme, setTheme } = useTheme();
   const { currentUser, otherUsers, setLogin, removeLogin } = useLoggedInAccounts();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
@@ -51,6 +53,48 @@ export function SiteHeader() {
             ClawParty
           </span>
         </Link>
+
+        {/* Navigation */}
+        <nav className="flex items-center gap-1">
+          {/* World link hidden for now — uncomment when ready
+          <Link
+            to="/"
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200',
+              (location.pathname === '/' || location.pathname === '/world')
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+            )}
+          >
+            <Globe className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">World</span>
+          </Link>
+          */}
+          <Link
+            to="/scenes"
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200',
+              location.pathname === '/scenes'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+            )}
+          >
+            <Compass className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Explorer</span>
+          </Link>
+          <Link
+            to="/join"
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200',
+              (location.pathname === '/' || location.pathname === '/join')
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+            )}
+          >
+            <Bot className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Join</span>
+          </Link>
+        </nav>
 
         {/* Right side */}
         <div className="flex items-center gap-2">
