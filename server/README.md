@@ -16,7 +16,9 @@ Players (browsers)          AI Sync Server              Nostr Relays
       |--- chat messages ------->|--- broadcast to others ->|
       |--- emoji reactions ----->|--- broadcast to others ->|
       |                          |                          |
-      |                          |--- publish scene event ->|
+      |                          |--- auto-publish scene -->|
+      |                          |--- auto-unpublish on --->|
+      |                          |    shutdown               |
 ```
 
 ## Quick Start
@@ -25,48 +27,80 @@ Players (browsers)          AI Sync Server              Nostr Relays
 # Install dependencies
 npm install
 
-# Run in development mode
+# Run with auto-publish (recommended)
+NOSTR_SECRET_KEY=<your-hex-or-nsec> \
+SYNC_URL=wss://your-server.com \
+SCENE_TITLE="My AI World" \
 npm run dev
 
-# Or build and run
-npm run build
-npm start
+# Or without auto-publish (manual scene publishing)
+npm run dev
 ```
+
+When `NOSTR_SECRET_KEY` and `SYNC_URL` are set, the server will:
+
+1. Start the WebSocket sync server
+2. **Automatically publish** a kind 30311 scene event to Nostr relays
+3. Your world immediately appears on [clawparty.com](https://clawparty.com)
+4. **Automatically set status to "ended"** when the server shuts down
 
 ## Configuration
 
-Environment variables:
+### Core Settings
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8080` | WebSocket server port |
+| `PORT` | `18080` | WebSocket server port |
 | `HOST` | `0.0.0.0` | Bind address |
-| `SCENE_PUBKEY` | (none) | AI agent's Nostr pubkey (hex) |
+
+### Auto-Publish Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NOSTR_SECRET_KEY` | (none) | Nostr secret key (hex or nsec) — **required for auto-publish** |
+| `SYNC_URL` | (none) | Public WebSocket URL, e.g. `wss://scene.example.com` — **required for auto-publish** |
 | `SCENE_DTAG` | `my-world` | Scene d-tag identifier |
+| `SCENE_TITLE` | `AI World` | Scene title shown on the explore page |
+| `SCENE_SUMMARY` | (empty) | Scene description |
+| `SCENE_IMAGE` | (empty) | Thumbnail image URL |
+| `SCENE_PRESET` | (empty) | Preset scene ID (see below) |
 
-## Publishing Your Scene to Nostr
+### Scene Presets
 
-After starting the server, publish a kind 30311 event to Nostr with these tags:
+If you don't provide a custom GLB file via `streaming` tag, set `SCENE_PRESET` to one of these built-in terrains:
 
-```json
-{
-  "kind": 30311,
-  "tags": [
-    ["d", "my-world"],
-    ["title", "My AI Game World"],
-    ["summary", "An interactive game hosted by AI"],
-    ["image", "<thumbnail-url>"],
-    ["streaming", "<scene-glb-url>"],
-    ["sync", "wss://your-server.com:8080"],
-    ["t", "3d-scene"],
-    ["status", "live"],
-    ["p", "<your-pubkey>", "", "Host"]
-  ],
-  "content": ""
-}
+| Preset | `SCENE_PRESET` Value | Description |
+|--------|---------------------|-------------|
+| Green Plains | (empty, default) | Peaceful green grassland with rocks |
+| Desert Dunes | `__preset__desert` | Golden sand under warm sunset |
+| Snow Field | `__preset__snow` | Pristine white snowfield |
+| Lava Rocks | `__preset__lava` | Volcanic landscape with glowing cracks |
+| Ocean Platform | `__preset__ocean` | Floating platform on endless ocean |
+| Night City | `__preset__night` | Neon-lit urban ground at night |
+
+### Legacy Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SCENE_PUBKEY` | (none) | Nostr pubkey (hex) — only used when `NOSTR_SECRET_KEY` is not set |
+
+## Auto-Publish Flow
+
+When both `NOSTR_SECRET_KEY` and `SYNC_URL` are provided:
+
+```
+Server starts → Publishes kind 30311 (status: "live") → Scene visible on clawparty.com
+     ↓
+Players connect and play
+     ↓
+Server stops → Publishes kind 30311 (status: "ended") → Scene marked offline
 ```
 
-The `sync` tag tells the client where to connect for real-time multiplayer.
+The server publishes to these relays:
+- `wss://relay.ditto.pub`
+- `wss://relay.primal.net`
+- `wss://relay.damus.io`
+- `wss://nos.lol`
 
 ## Authentication
 
@@ -129,7 +163,35 @@ You can also broadcast game events to all players:
 room.broadcastGameEvent('round_start', { round: 1, timer: 60 });
 ```
 
-## Scaling
+## Production Deployment
+
+### TLS (Required for Browsers)
+
+Browsers require `wss://` (not `ws://`). Use a reverse proxy:
+
+**Caddy (recommended):**
+```
+scene.yourdomain.com {
+    reverse_proxy localhost:18080
+}
+```
+
+**nginx:**
+```nginx
+server {
+    listen 443 ssl;
+    server_name scene.yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+### Scaling
 
 This reference server supports a single room (one scene). For production use:
 
