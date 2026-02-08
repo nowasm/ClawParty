@@ -14,13 +14,15 @@ import {
 
 const EYE_COLOR = '#111111';
 
-/** Vertical layout (same skeleton as before for animation compat) */
-const HEAD_Y = 1.22;
-const HEAD_RX = 0.36; // head width radius
-const HEAD_RY = 0.30; // head height radius
-const BODY_Y = 0.70;
-const ARM_PIVOT_Y = 0.92;
-const ARM_X = 0.34;
+/**
+ * Redesigned proportions for a cuter, rounder lobster
+ * inspired by the reference mascot image.
+ */
+const HEAD_Y = 1.18;
+const HEAD_R = 0.38; // head sphere radius (single uniform radius for rounder look)
+const BODY_Y = 0.68;
+const ARM_PIVOT_Y = 1.0;
+const ARM_X = 0.38;
 const LEG_PIVOT_Y = 0.46;
 const LEG_X = 0.14;
 
@@ -71,72 +73,65 @@ function easeInOutQuad(t: number): number {
 }
 
 // ======================================================================
-// Lobster Eye Stalks with Expression
+// Cute Lobster Eyes (simple dots on face, no stalks)
 // ======================================================================
 
 function LobsterEyes({ expression, shellColor }: { expression: ExpressionType; shellColor: string }) {
-  const stalkColor = darken(shellColor, 0.05);
-
-  // Expression-based eye sizing
-  const eyeRadius = expression === 'surprised' ? 0.06 : 0.048;
-  const stalkHeight = expression === 'surprised' ? 0.16 : 0.12;
-  const stalkAngle = expression === 'love' ? 0.15 : 0.25;
+  // Eye sizing based on expression
+  const eyeRadius = expression === 'surprised' ? 0.058 : 0.048;
+  const eyeSpacing = 0.12;
+  const eyeY = 0.02;
+  const eyeZ = HEAD_R * 0.92;
 
   return (
-    <group position={[0, HEAD_RY + 0.02, 0.06]}>
-      {/* Left eye stalk */}
-      <group position={[0.12, 0, 0]} rotation={[stalkAngle, 0, 0.22]}>
-        {/* Stalk */}
-        <mesh position={[0, stalkHeight * 0.4, 0]}>
-          <capsuleGeometry args={[0.032, stalkHeight, 4, 8]} />
-          <meshStandardMaterial color={stalkColor} roughness={0.7} />
-        </mesh>
-        {/* Eye ball */}
-        <mesh position={[0, stalkHeight + 0.02, 0]}>
-          <sphereGeometry args={[eyeRadius, 10, 10]} />
-          <meshStandardMaterial color="#f8f8f0" roughness={0.4} />
+    <group position={[0, eyeY, 0]}>
+      {/* Left eye */}
+      <group position={[eyeSpacing, 0, eyeZ]}>
+        {/* Eye white */}
+        <mesh>
+          <sphereGeometry args={[eyeRadius * 1.3, 12, 12]} />
+          <meshStandardMaterial color="#f8f8f0" roughness={0.3} />
         </mesh>
         {/* Pupil */}
-        <mesh position={[0, stalkHeight + 0.02, eyeRadius * 0.85]}>
-          <circleGeometry args={[eyeRadius * 0.55, 12]} />
+        <mesh position={[0, 0, eyeRadius * 1.1]}>
+          <circleGeometry args={[eyeRadius * 0.7, 14]} />
           <meshBasicMaterial color={expression === 'love' ? '#e8457a' : EYE_COLOR} />
         </mesh>
         {/* Highlight */}
-        <mesh position={[eyeRadius * 0.25, stalkHeight + 0.04, eyeRadius * 0.88]}>
-          <circleGeometry args={[0.016, 8]} />
+        <mesh position={[eyeRadius * 0.3, eyeRadius * 0.25, eyeRadius * 1.18]}>
+          <circleGeometry args={[0.014, 8]} />
           <meshBasicMaterial color="#ffffff" />
         </mesh>
         {/* Happy / Love: ^_^ squint overlay */}
         {(expression === 'happy' || expression === 'love' || expression === 'laugh') && (
-          <mesh position={[0, stalkHeight + 0.02, eyeRadius * 0.92]}>
-            <boxGeometry args={[eyeRadius * 1.6, 0.018, 0.004]} />
-            <meshBasicMaterial color={expression === 'love' ? '#e8457a' : stalkColor} />
+          <mesh position={[0, 0, eyeRadius * 1.15]}>
+            <boxGeometry args={[eyeRadius * 2.0, 0.02, 0.004]} />
+            <meshBasicMaterial color={expression === 'love' ? '#e8457a' : shellColor} />
           </mesh>
         )}
       </group>
 
-      {/* Right eye stalk */}
-      <group position={[-0.12, 0, 0]} rotation={[stalkAngle, 0, -0.22]}>
-        <mesh position={[0, stalkHeight * 0.4, 0]}>
-          <capsuleGeometry args={[0.032, stalkHeight, 4, 8]} />
-          <meshStandardMaterial color={stalkColor} roughness={0.7} />
+      {/* Right eye */}
+      <group position={[-eyeSpacing, 0, eyeZ]}>
+        {/* Eye white */}
+        <mesh>
+          <sphereGeometry args={[eyeRadius * 1.3, 12, 12]} />
+          <meshStandardMaterial color="#f8f8f0" roughness={0.3} />
         </mesh>
-        <mesh position={[0, stalkHeight + 0.02, 0]}>
-          <sphereGeometry args={[eyeRadius, 10, 10]} />
-          <meshStandardMaterial color="#f8f8f0" roughness={0.4} />
-        </mesh>
-        <mesh position={[0, stalkHeight + 0.02, eyeRadius * 0.85]}>
-          <circleGeometry args={[eyeRadius * 0.55, 12]} />
+        {/* Pupil */}
+        <mesh position={[0, 0, eyeRadius * 1.1]}>
+          <circleGeometry args={[eyeRadius * 0.7, 14]} />
           <meshBasicMaterial color={expression === 'love' ? '#e8457a' : EYE_COLOR} />
         </mesh>
-        <mesh position={[-eyeRadius * 0.25, stalkHeight + 0.04, eyeRadius * 0.88]}>
-          <circleGeometry args={[0.016, 8]} />
+        {/* Highlight */}
+        <mesh position={[-eyeRadius * 0.3, eyeRadius * 0.25, eyeRadius * 1.18]}>
+          <circleGeometry args={[0.014, 8]} />
           <meshBasicMaterial color="#ffffff" />
         </mesh>
         {(expression === 'happy' || expression === 'love' || expression === 'laugh') && (
-          <mesh position={[0, stalkHeight + 0.02, eyeRadius * 0.92]}>
-            <boxGeometry args={[eyeRadius * 1.6, 0.018, 0.004]} />
-            <meshBasicMaterial color={expression === 'love' ? '#e8457a' : stalkColor} />
+          <mesh position={[0, 0, eyeRadius * 1.15]}>
+            <boxGeometry args={[eyeRadius * 2.0, 0.02, 0.004]} />
+            <meshBasicMaterial color={expression === 'love' ? '#e8457a' : shellColor} />
           </mesh>
         )}
       </group>
@@ -149,11 +144,11 @@ function LobsterEyes({ expression, shellColor }: { expression: ExpressionType; s
 // ======================================================================
 
 function LobsterMouth({ expression }: { expression: ExpressionType }) {
-  const faceZ = HEAD_RX * 0.92;
+  const faceZ = HEAD_R * 0.94;
   const mouthColor = '#8B3A2A';
 
   return (
-    <group position={[0, -0.08, faceZ]}>
+    <group position={[0, -0.12, faceZ]}>
       {/* Normal: small content line */}
       {expression === 'normal' && (
         <mesh>
@@ -187,143 +182,148 @@ function LobsterMouth({ expression }: { expression: ExpressionType }) {
 }
 
 // ======================================================================
-// Lobster Antennae
+// V-Shaped Antennae (matching reference image style)
 // ======================================================================
 
 function LobsterAntennae({ shellColor }: { shellColor: string }) {
-  const antennaColor = darken(shellColor, 0.15);
+  const antennaColor = darken(shellColor, 0.05);
+  const tipColor = lighten(shellColor, 0.15);
+
   return (
-    <group position={[0, HEAD_RY * 0.6, HEAD_RX + 0.04]}>
-      {/* Left antenna */}
-      <mesh position={[0.06, 0.04, 0.06]} rotation={[0.6, 0.25, 0.1]}>
-        <capsuleGeometry args={[0.01, 0.32, 3, 4]} />
-        <meshStandardMaterial color={antennaColor} roughness={0.8} />
-      </mesh>
-      {/* Right antenna */}
-      <mesh position={[-0.06, 0.04, 0.06]} rotation={[0.6, -0.25, -0.1]}>
-        <capsuleGeometry args={[0.01, 0.32, 3, 4]} />
-        <meshStandardMaterial color={antennaColor} roughness={0.8} />
-      </mesh>
-      {/* Short feeler left */}
-      <mesh position={[0.04, -0.02, 0.05]} rotation={[0.5, 0.4, 0.15]}>
-        <capsuleGeometry args={[0.008, 0.15, 3, 4]} />
-        <meshStandardMaterial color={antennaColor} roughness={0.8} />
-      </mesh>
-      {/* Short feeler right */}
-      <mesh position={[-0.04, -0.02, 0.05]} rotation={[0.5, -0.4, -0.15]}>
-        <capsuleGeometry args={[0.008, 0.15, 3, 4]} />
-        <meshStandardMaterial color={antennaColor} roughness={0.8} />
-      </mesh>
+    <group position={[0, HEAD_R * 0.85, 0.02]}>
+      {/* Left antenna - V shape pointing up and outward */}
+      <group position={[0.06, 0, 0]} rotation={[0.15, 0, 0.35]}>
+        {/* Main antenna shaft */}
+        <mesh position={[0, 0.14, 0]}>
+          <capsuleGeometry args={[0.018, 0.24, 4, 6]} />
+          <meshStandardMaterial color={antennaColor} roughness={0.6} />
+        </mesh>
+        {/* Antenna tip (slightly lighter) */}
+        <mesh position={[0, 0.28, 0]}>
+          <sphereGeometry args={[0.022, 8, 8]} />
+          <meshStandardMaterial color={tipColor} roughness={0.5} />
+        </mesh>
+      </group>
+
+      {/* Right antenna - V shape pointing up and outward */}
+      <group position={[-0.06, 0, 0]} rotation={[0.15, 0, -0.35]}>
+        {/* Main antenna shaft */}
+        <mesh position={[0, 0.14, 0]}>
+          <capsuleGeometry args={[0.018, 0.24, 4, 6]} />
+          <meshStandardMaterial color={antennaColor} roughness={0.6} />
+        </mesh>
+        {/* Antenna tip */}
+        <mesh position={[0, 0.28, 0]}>
+          <sphereGeometry args={[0.022, 8, 8]} />
+          <meshStandardMaterial color={tipColor} roughness={0.5} />
+        </mesh>
+      </group>
     </group>
   );
 }
 
 // ======================================================================
-// Lobster Claw
+// Cute Rounded Claw (bigger, rounder, more cartoonish)
 // ======================================================================
 
 function LobsterClaw({ side, shellColor }: { side: 'left' | 'right'; shellColor: string }) {
   const sign = side === 'left' ? 1 : -1;
-  const clawColor = darken(shellColor, 0.08);
-  const clawDark = darken(shellColor, 0.25);
+  const clawColor = darken(shellColor, 0.05);
+  const clawDark = darken(shellColor, 0.18);
+  const clawHighlight = lighten(shellColor, 0.12);
 
   return (
     <group>
-      {/* Upper arm */}
-      <mesh position={[0, -0.12, 0.02]} castShadow>
-        <capsuleGeometry args={[0.065, 0.12, 4, 8]} />
-        <meshStandardMaterial color={shellColor} roughness={0.7} />
+      {/* Upper arm segment */}
+      <mesh position={[sign * 0.04, -0.06, 0.02]} rotation={[0, 0, sign * 0.2]} castShadow>
+        <capsuleGeometry args={[0.06, 0.10, 5, 8]} />
+        <meshStandardMaterial color={shellColor} roughness={0.65} />
       </mesh>
-      {/* Forearm */}
-      <mesh position={[sign * 0.02, -0.28, 0.06]} rotation={[0.2, 0, sign * 0.15]} castShadow>
-        <capsuleGeometry args={[0.055, 0.10, 4, 8]} />
-        <meshStandardMaterial color={shellColor} roughness={0.7} />
+
+      {/* Forearm / wrist */}
+      <mesh position={[sign * 0.08, -0.18, 0.04]} rotation={[0.1, 0, sign * 0.3]} castShadow>
+        <capsuleGeometry args={[0.05, 0.08, 5, 8]} />
+        <meshStandardMaterial color={shellColor} roughness={0.65} />
       </mesh>
-      {/* Claw - upper pincer */}
-      <mesh position={[sign * 0.03, -0.36, 0.12]} rotation={[0.3, sign * 0.15, sign * 0.1]}>
-        <boxGeometry args={[0.15, 0.055, 0.20]} />
-        <meshStandardMaterial color={clawColor} roughness={0.65} />
+
+      {/* Claw body - big rounded main shape */}
+      <mesh position={[sign * 0.10, -0.30, 0.08]} rotation={[0.15, sign * 0.1, sign * 0.15]} castShadow>
+        <sphereGeometry args={[0.12, 14, 12]} />
+        <meshStandardMaterial color={clawColor} roughness={0.55} />
       </mesh>
-      {/* Claw - lower pincer */}
-      <mesh position={[sign * 0.03, -0.41, 0.10]} rotation={[-0.1, sign * 0.15, sign * 0.05]}>
-        <boxGeometry args={[0.12, 0.04, 0.16]} />
-        <meshStandardMaterial color={clawDark} roughness={0.65} />
+
+      {/* Claw highlight (top sheen) */}
+      <mesh position={[sign * 0.10, -0.24, 0.14]} rotation={[0.3, sign * 0.1, sign * 0.1]}>
+        <sphereGeometry args={[0.06, 10, 8]} />
+        <meshStandardMaterial
+          color={clawHighlight}
+          roughness={0.4}
+          transparent
+          opacity={0.5}
+        />
       </mesh>
-      {/* Claw tip bumps */}
-      <mesh position={[sign * 0.03, -0.37, 0.22]}>
-        <sphereGeometry args={[0.03, 6, 6]} />
-        <meshStandardMaterial color={clawColor} roughness={0.65} />
+
+      {/* Upper pincer */}
+      <mesh position={[sign * 0.12, -0.32, 0.20]} rotation={[0.4, sign * 0.2, sign * 0.1]}>
+        <boxGeometry args={[0.10, 0.05, 0.14]} />
+        <meshStandardMaterial color={clawColor} roughness={0.6} />
+      </mesh>
+      {/* Upper pincer tip */}
+      <mesh position={[sign * 0.12, -0.32, 0.28]}>
+        <sphereGeometry args={[0.035, 8, 6]} />
+        <meshStandardMaterial color={clawColor} roughness={0.6} />
+      </mesh>
+
+      {/* Lower pincer */}
+      <mesh position={[sign * 0.10, -0.38, 0.18]} rotation={[-0.15, sign * 0.15, sign * 0.05]}>
+        <boxGeometry args={[0.08, 0.04, 0.12]} />
+        <meshStandardMaterial color={clawDark} roughness={0.6} />
+      </mesh>
+      {/* Lower pincer tip */}
+      <mesh position={[sign * 0.10, -0.38, 0.25]}>
+        <sphereGeometry args={[0.028, 8, 6]} />
+        <meshStandardMaterial color={clawDark} roughness={0.6} />
       </mesh>
     </group>
   );
 }
 
 // ======================================================================
-// Lobster Walking Legs (per side)
-// ======================================================================
-
-function LobsterLegPair({ side, shellColor }: { side: 'left' | 'right'; shellColor: string }) {
-  const sign = side === 'left' ? 1 : -1;
-  const legColor = darken(shellColor, 0.20);
-  const offsets = [0.08, -0.04, -0.16];
-
-  return (
-    <group>
-      {offsets.map((zOff, i) => (
-        <mesh
-          key={i}
-          position={[sign * 0.10, -0.14 - i * 0.02, zOff]}
-          rotation={[0, 0, sign * (0.5 + i * 0.1)]}
-        >
-          <capsuleGeometry args={[0.022, 0.16, 3, 6]} />
-          <meshStandardMaterial color={legColor} roughness={0.8} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-// ======================================================================
-// Lobster Tail
+// Simplified Tail (cuter, shorter)
 // ======================================================================
 
 function LobsterTail({ shellColor }: { shellColor: string }) {
-  const tailColor = darken(shellColor, 0.10);
-  const tailDark = darken(shellColor, 0.22);
+  const tailColor = darken(shellColor, 0.08);
+  const tailDark = darken(shellColor, 0.18);
 
   return (
-    <group position={[0, -0.05, -0.20]}>
-      {/* Tail segment 1 */}
-      <mesh rotation={[-0.3, 0, 0]}>
-        <capsuleGeometry args={[0.10, 0.10, 6, 8]} />
-        <meshStandardMaterial color={tailColor} roughness={0.7} />
+    <group position={[0, -0.02, -0.12]}>
+      {/* Tail segment 1 - wider */}
+      <mesh rotation={[-0.25, 0, 0]}>
+        <capsuleGeometry args={[0.10, 0.06, 6, 8]} />
+        <meshStandardMaterial color={tailColor} roughness={0.65} />
       </mesh>
-      {/* Tail segment 2 */}
-      <mesh position={[0, -0.06, -0.12]} rotation={[-0.5, 0, 0]}>
-        <capsuleGeometry args={[0.08, 0.08, 5, 8]} />
-        <meshStandardMaterial color={tailDark} roughness={0.7} />
+      {/* Tail segment 2 - smaller */}
+      <mesh position={[0, -0.04, -0.10]} rotation={[-0.45, 0, 0]}>
+        <capsuleGeometry args={[0.07, 0.05, 5, 8]} />
+        <meshStandardMaterial color={tailDark} roughness={0.65} />
       </mesh>
-      {/* Tail fan - center */}
-      <mesh position={[0, -0.10, -0.22]} rotation={[-0.6, 0, 0]}>
-        <boxGeometry args={[0.16, 0.03, 0.10]} />
-        <meshStandardMaterial color={tailColor} roughness={0.7} />
+      {/* Tail fan - simplified rounded fan */}
+      <mesh position={[0, -0.06, -0.18]} rotation={[-0.55, 0, 0]}>
+        <sphereGeometry args={[0.08, 10, 6]} />
+        <meshStandardMaterial color={tailColor} roughness={0.6} />
       </mesh>
-      {/* Tail fan - left */}
-      <mesh position={[0.08, -0.10, -0.20]} rotation={[-0.5, 0.3, 0]}>
-        <boxGeometry args={[0.09, 0.025, 0.08]} />
-        <meshStandardMaterial color={tailColor} roughness={0.7} />
-      </mesh>
-      {/* Tail fan - right */}
-      <mesh position={[-0.08, -0.10, -0.20]} rotation={[-0.5, -0.3, 0]}>
-        <boxGeometry args={[0.09, 0.025, 0.08]} />
-        <meshStandardMaterial color={tailColor} roughness={0.7} />
+      {/* Small tail tip */}
+      <mesh position={[0, -0.07, -0.25]} rotation={[-0.6, 0, 0]}>
+        <sphereGeometry args={[0.04, 8, 6]} />
+        <meshStandardMaterial color={tailDark} roughness={0.6} />
       </mesh>
     </group>
   );
 }
 
 // ======================================================================
-// Main Avatar Component (Lobster Character)
+// Main Avatar Component (Cute Lobster Character)
 // ======================================================================
 
 export function AvatarModel({
@@ -349,7 +349,7 @@ export function AvatarModel({
       dark: darken(color, 0.15),
       darker: darken(color, 0.30),
       light: lighten(color, 0.20),
-      belly: lighten(color, 0.35),
+      belly: lighten(color, 0.40),
     }),
     [color],
   );
@@ -384,26 +384,26 @@ export function AvatarModel({
   // Idle animation
   function applyIdle(t: number) {
     if (groupRef.current) {
-      groupRef.current.position.y = Math.sin(t * 1.5) * 0.015;
+      groupRef.current.position.y = Math.sin(t * 1.5) * 0.02;
     }
-    // Claw gentle sway
-    const clawSwing = Math.sin(t * 1.2) * 0.08;
+    // Claw gentle sway - wider for cuter effect
+    const clawSwing = Math.sin(t * 1.2) * 0.10;
     if (leftArmRef.current) {
       leftArmRef.current.rotation.x = clawSwing;
-      leftArmRef.current.rotation.z = Math.sin(t * 0.9) * 0.06;
+      leftArmRef.current.rotation.z = Math.sin(t * 0.9) * 0.08;
     }
     if (rightArmRef.current) {
       rightArmRef.current.rotation.x = -clawSwing;
-      rightArmRef.current.rotation.z = -Math.sin(t * 0.9 + 0.5) * 0.06;
+      rightArmRef.current.rotation.z = -Math.sin(t * 0.9 + 0.5) * 0.08;
     }
-    // Leg subtle movement
+    // Legs subtle (invisible but keep for animation compat)
     const legSwing = Math.sin(t * 1.2) * 0.04;
     if (leftLegRef.current) leftLegRef.current.rotation.x = -legSwing;
     if (rightLegRef.current) rightLegRef.current.rotation.x = legSwing;
-    // Head bob
+    // Head bob - gentle tilt
     if (headRef.current) {
-      headRef.current.rotation.z = Math.sin(t * 0.8) * 0.04;
-      headRef.current.rotation.x = 0;
+      headRef.current.rotation.z = Math.sin(t * 0.8) * 0.05;
+      headRef.current.rotation.x = Math.sin(t * 1.0) * 0.02;
     }
     // Tail gentle wave
     if (tailRef.current) {
@@ -418,21 +418,21 @@ export function AvatarModel({
     const legSwing = Math.sin(cycle) * 0.35;
     const clawSwing = Math.sin(cycle) * 0.45;
     if (groupRef.current) {
-      groupRef.current.position.y = Math.abs(Math.sin(cycle)) * 0.035;
+      groupRef.current.position.y = Math.abs(Math.sin(cycle)) * 0.04;
     }
     if (leftLegRef.current) leftLegRef.current.rotation.x = -legSwing;
     if (rightLegRef.current) rightLegRef.current.rotation.x = legSwing;
     if (leftArmRef.current) {
       leftArmRef.current.rotation.x = -clawSwing;
-      leftArmRef.current.rotation.z = 0.08;
+      leftArmRef.current.rotation.z = 0.10;
     }
     if (rightArmRef.current) {
       rightArmRef.current.rotation.x = clawSwing;
-      rightArmRef.current.rotation.z = -0.08;
+      rightArmRef.current.rotation.z = -0.10;
     }
     if (headRef.current) {
       headRef.current.rotation.x = 0;
-      headRef.current.rotation.z = Math.sin(t * 0.6) * 0.03;
+      headRef.current.rotation.z = Math.sin(t * 0.6) * 0.04;
     }
     if (tailRef.current) {
       tailRef.current.rotation.x = Math.sin(cycle * 0.5) * 0.1;
@@ -446,17 +446,17 @@ export function AvatarModel({
     const legSwing = Math.sin(cycle) * 0.55;
     const clawSwing = Math.sin(cycle) * 0.75;
     if (groupRef.current) {
-      groupRef.current.position.y = Math.abs(Math.sin(cycle)) * 0.07;
+      groupRef.current.position.y = Math.abs(Math.sin(cycle)) * 0.08;
     }
     if (leftLegRef.current) leftLegRef.current.rotation.x = -legSwing;
     if (rightLegRef.current) rightLegRef.current.rotation.x = legSwing;
     if (leftArmRef.current) {
       leftArmRef.current.rotation.x = -clawSwing;
-      leftArmRef.current.rotation.z = 0.15;
+      leftArmRef.current.rotation.z = 0.18;
     }
     if (rightArmRef.current) {
       rightArmRef.current.rotation.x = clawSwing;
-      rightArmRef.current.rotation.z = -0.15;
+      rightArmRef.current.rotation.z = -0.18;
     }
     if (headRef.current) {
       headRef.current.rotation.x = 0.08;
@@ -482,7 +482,6 @@ export function AvatarModel({
 
     switch (action) {
       case 'wave': {
-        // Raise right claw and wave
         if (rightArmRef.current) {
           rightArmRef.current.rotation.z = -2.2 * intensity;
           rightArmRef.current.rotation.x = Math.sin(t * 8) * 0.3 * intensity;
@@ -498,7 +497,6 @@ export function AvatarModel({
         break;
       }
       case 'clap': {
-        // Claws clap together
         const clapCycle = Math.sin(t * 10) * 0.3 * intensity;
         if (leftArmRef.current) {
           leftArmRef.current.rotation.x = -1.2 * intensity;
@@ -586,7 +584,6 @@ export function AvatarModel({
         break;
       }
       case 'thumbsup': {
-        // Raise right claw proudly
         if (rightArmRef.current) {
           rightArmRef.current.rotation.x = -1.3 * intensity;
           rightArmRef.current.rotation.z = -0.3 * intensity;
@@ -667,68 +664,76 @@ export function AvatarModel({
 
   return (
     <group ref={groupRef}>
-      {/* ====== HEAD (carapace top + eyes + antennae) ====== */}
+      {/* ====== HEAD (round face + eyes + antennae + mouth) ====== */}
       <group ref={headRef} position={[0, HEAD_Y, 0]}>
-        {/* Head shell */}
+        {/* Head shell - rounder, cuter */}
         <mesh castShadow>
-          <sphereGeometry args={[HEAD_RX, 20, 18]} />
-          <meshStandardMaterial color={colors.main} roughness={0.65} />
-        </mesh>
-        {/* Head shell ridge */}
-        <mesh position={[0, HEAD_RY * 0.75, 0]}>
-          <boxGeometry args={[0.04, 0.03, HEAD_RX * 1.2]} />
-          <meshStandardMaterial color={colors.dark} roughness={0.6} />
+          <sphereGeometry args={[HEAD_R, 24, 20]} />
+          <meshStandardMaterial color={colors.main} roughness={0.55} />
         </mesh>
 
-        {/* Eye stalks */}
+        {/* Head sheen highlight (subtle top highlight for 3D feel) */}
+        <mesh position={[0, HEAD_R * 0.55, HEAD_R * 0.35]}>
+          <sphereGeometry args={[HEAD_R * 0.3, 12, 10]} />
+          <meshStandardMaterial
+            color={colors.light}
+            roughness={0.3}
+            transparent
+            opacity={0.3}
+          />
+        </mesh>
+
+        {/* Cute dot eyes */}
         <LobsterEyes expression={expression} shellColor={colors.main} />
 
-        {/* Antennae */}
+        {/* V-shaped antennae */}
         <LobsterAntennae shellColor={colors.main} />
 
         {/* Mouth */}
         <LobsterMouth expression={expression} />
 
-        {/* Cheek blush (subtle) */}
-        <mesh position={[-0.22, -0.05, HEAD_RX * 0.7]} rotation={[0, 0.3, 0]}>
-          <circleGeometry args={[0.04, 10]} />
+        {/* Cheek blush (more prominent for cute look) */}
+        <mesh position={[-0.20, -0.06, HEAD_R * 0.78]} rotation={[0, 0.25, 0]}>
+          <circleGeometry args={[0.045, 12]} />
           <meshBasicMaterial
             color="#FF9999"
             transparent
-            opacity={expression === 'love' ? 0.6 : expression === 'happy' ? 0.4 : 0.15}
+            opacity={expression === 'love' ? 0.65 : expression === 'happy' ? 0.45 : 0.2}
           />
         </mesh>
-        <mesh position={[0.22, -0.05, HEAD_RX * 0.7]} rotation={[0, -0.3, 0]}>
-          <circleGeometry args={[0.04, 10]} />
+        <mesh position={[0.20, -0.06, HEAD_R * 0.78]} rotation={[0, -0.25, 0]}>
+          <circleGeometry args={[0.045, 12]} />
           <meshBasicMaterial
             color="#FF9999"
             transparent
-            opacity={expression === 'love' ? 0.6 : expression === 'happy' ? 0.4 : 0.15}
+            opacity={expression === 'love' ? 0.65 : expression === 'happy' ? 0.45 : 0.2}
           />
         </mesh>
       </group>
 
-      {/* ====== BODY (main carapace) ====== */}
+      {/* ====== BODY (compact, round) ====== */}
       <mesh position={[0, BODY_Y, 0]} castShadow>
-        <capsuleGeometry args={[0.24, 0.26, 8, 16]} />
-        <meshStandardMaterial color={colors.main} roughness={0.65} />
-      </mesh>
-      {/* Body segment lines */}
-      <mesh position={[0, BODY_Y + 0.08, 0]}>
-        <cylinderGeometry args={[0.245, 0.245, 0.02, 16]} />
-        <meshStandardMaterial color={colors.dark} roughness={0.6} />
-      </mesh>
-      <mesh position={[0, BODY_Y - 0.06, 0]}>
-        <cylinderGeometry args={[0.245, 0.245, 0.02, 16]} />
-        <meshStandardMaterial color={colors.dark} roughness={0.6} />
-      </mesh>
-      {/* Belly (lighter underside, front-facing) */}
-      <mesh position={[0, BODY_Y - 0.02, 0.08]} scale={[0.75, 0.85, 0.5]}>
-        <capsuleGeometry args={[0.20, 0.20, 6, 12]} />
-        <meshStandardMaterial color={colors.belly} roughness={0.8} />
+        <capsuleGeometry args={[0.26, 0.22, 10, 18]} />
+        <meshStandardMaterial color={colors.main} roughness={0.55} />
       </mesh>
 
-      {/* ====== LEFT CLAW ====== */}
+      {/* Body segment lines (subtle ring markings) */}
+      <mesh position={[0, BODY_Y + 0.06, 0]}>
+        <cylinderGeometry args={[0.262, 0.262, 0.015, 18]} />
+        <meshStandardMaterial color={colors.dark} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, BODY_Y - 0.06, 0]}>
+        <cylinderGeometry args={[0.262, 0.262, 0.015, 18]} />
+        <meshStandardMaterial color={colors.dark} roughness={0.5} />
+      </mesh>
+
+      {/* Belly (prominent lighter underside - matching reference) */}
+      <mesh position={[0, BODY_Y - 0.02, 0.10]} scale={[0.72, 0.85, 0.45]}>
+        <capsuleGeometry args={[0.22, 0.18, 8, 14]} />
+        <meshStandardMaterial color={colors.belly} roughness={0.7} />
+      </mesh>
+
+      {/* ====== LEFT CLAW (raised up, matching reference pose) ====== */}
       <group ref={leftArmRef} position={[ARM_X, ARM_PIVOT_Y, 0]}>
         <LobsterClaw side="left" shellColor={colors.main} />
       </group>
@@ -738,15 +743,9 @@ export function AvatarModel({
         <LobsterClaw side="right" shellColor={colors.main} />
       </group>
 
-      {/* ====== LEFT LEGS ====== */}
-      <group ref={leftLegRef} position={[LEG_X, LEG_PIVOT_Y, 0]}>
-        <LobsterLegPair side="left" shellColor={colors.main} />
-      </group>
-
-      {/* ====== RIGHT LEGS ====== */}
-      <group ref={rightLegRef} position={[-LEG_X, LEG_PIVOT_Y, 0]}>
-        <LobsterLegPair side="right" shellColor={colors.main} />
-      </group>
+      {/* ====== LEGS (hidden but refs maintained for animation compat) ====== */}
+      <group ref={leftLegRef} position={[LEG_X, LEG_PIVOT_Y, 0]} />
+      <group ref={rightLegRef} position={[-LEG_X, LEG_PIVOT_Y, 0]} />
 
       {/* ====== TAIL ====== */}
       <group ref={tailRef} position={[0, BODY_Y - 0.10, -0.18]}>
