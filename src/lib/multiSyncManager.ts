@@ -119,6 +119,8 @@ export interface MultiSyncManagerOptions {
   pubkey: string;
   /** Sign a challenge string — returns the signature (hex) */
   sign: (challenge: string) => Promise<string>;
+  /** Map ID to join (0–9999) */
+  mapId?: number;
 }
 
 export class MultiSyncManager {
@@ -161,10 +163,10 @@ export class MultiSyncManager {
    * Connect to multiple sync servers.
    * Takes up to MAX_ACTIVE_SERVERS URLs (extras are ignored).
    */
-  connect(urls: string[], pubkey: string, sign: (challenge: string) => Promise<string>): void {
+  connect(urls: string[], pubkey: string, sign: (challenge: string) => Promise<string>, mapId?: number): void {
     if (this.destroyed) return;
 
-    this.opts = { pubkey, sign };
+    this.opts = { pubkey, sign, mapId };
 
     // Take only the first MAX_ACTIVE_SERVERS URLs
     const activeUrls = urls.slice(0, MAX_ACTIVE_SERVERS);
@@ -180,7 +182,7 @@ export class MultiSyncManager {
     // Connect to new servers
     for (const url of activeUrls) {
       if (this.connections.has(url)) continue; // already connected
-      this.addServer(url, pubkey, sign);
+      this.addServer(url, pubkey, sign, mapId);
     }
 
     // Start latency measurement
@@ -246,8 +248,8 @@ export class MultiSyncManager {
   // Private: Server management
   // --------------------------------------------------------------------------
 
-  private addServer(url: string, pubkey: string, sign: (challenge: string) => Promise<string>): void {
-    const opts: SceneSyncManagerOptions = { syncUrl: url, pubkey, sign };
+  private addServer(url: string, pubkey: string, sign: (challenge: string) => Promise<string>, mapId?: number): void {
+    const opts: SceneSyncManagerOptions = { syncUrl: url, pubkey, sign, mapId };
     const manager = new SceneSyncManager(opts);
 
     const conn: ServerConnection = {

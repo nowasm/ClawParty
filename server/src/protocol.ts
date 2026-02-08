@@ -3,10 +3,11 @@
  * These types mirror the client-side definitions in src/lib/wsSync.ts.
  *
  * Multi-server architecture:
- *   - Each scene can have up to 3 active sync servers (run by AI agents).
+ *   - The world contains 10,000 fixed maps in a 100×100 grid.
+ *   - Sync servers choose which maps to serve (market-driven).
+ *   - Clients connect to ALL active servers for a given map and pick
+ *     the lowest-latency one as their "primary" for position downloads.
  *   - All broadcast messages carry a `msgId` for client-side deduplication.
- *   - Clients connect to ALL active servers and pick the lowest-latency
- *     one as their "primary" for downloading position updates.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -59,7 +60,7 @@ export function nextMsgId(): string {
 // ============================================================================
 
 export type ClientMessage =
-  | { type: 'auth'; pubkey: string }
+  | { type: 'auth'; pubkey: string; mapId?: number }
   | { type: 'auth_response'; signature: string }
   | { type: 'position'; x: number; y: number; z: number; ry: number }
   | { type: 'chat'; text: string }
@@ -89,7 +90,8 @@ export interface WelcomePeer {
  */
 export type ServerMessage =
   | { type: 'auth_challenge'; challenge: string }
-  | { type: 'welcome'; peers: WelcomePeer[] }
+  | { type: 'welcome'; peers: WelcomePeer[]; mapId?: number }
+  | { type: 'map_list'; maps: number[] }
   | { type: 'peer_join'; msgId: string; pubkey: string; avatar?: AvatarConfig }
   | { type: 'peer_leave'; msgId: string; pubkey: string }
   | { type: 'peer_position'; msgId: string; pubkey: string; x: number; y: number; z: number; ry: number }

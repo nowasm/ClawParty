@@ -1,8 +1,9 @@
 /**
  * Room management for scene sync.
  *
- * Each scene has one room. The room tracks connected clients,
+ * Each map has one room. The room tracks connected clients,
  * broadcasts messages, and manages peer state.
+ * A Room is identified by a mapId (0–9999).
  */
 
 import type { WebSocket } from 'ws';
@@ -39,11 +40,18 @@ interface RoomClient {
 }
 
 export class Room {
+  /** The map ID this room is serving */
+  public readonly mapId: number;
+
   private clients: Map<WebSocket, RoomClient> = new Map();
   private pubkeyIndex: Map<string, WebSocket> = new Map();
 
   /** Optional hook for AI game logic — called on every client message */
   public onClientMessage?: (pubkey: string, msg: ClientMessage) => ServerMessage[] | undefined;
+
+  constructor(mapId: number = 0) {
+    this.mapId = mapId;
+  }
 
   /** Get number of authenticated clients */
   get playerCount(): number {
@@ -98,6 +106,17 @@ export class Room {
     ws.on('error', () => {
       this.removeConnection(ws);
     });
+  }
+
+  /**
+   * Replay an auth message that was already intercepted by the index router.
+   * This allows the RoomManager to extract mapId from the first auth message,
+   * route to the correct Room, and then replay the auth into that Room's handler.
+   */
+  replayAuthMessage(ws: WebSocket, msg: ClientMessage): void {
+    const client = this.clients.get(ws);
+    if (!client) return;
+    this.handleMessage(ws, client, msg);
   }
 
   /** Remove a connection and notify peers */
@@ -158,7 +177,7 @@ export class Room {
 
       // Send welcome with current peer list (excluding self)
       const peers = this.getPeers().filter((p) => p.pubkey !== client.pubkey);
-      this.send(ws, { type: 'welcome', peers });
+      this.send(ws, { type: 'welcome', peers, mapId: this.mapId });
 
       // Notify others about the new peer
       this.broadcastExcept(ws, {

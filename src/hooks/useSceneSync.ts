@@ -40,6 +40,8 @@ interface UseSceneSyncOptions {
   syncUrl?: string | undefined;
   /** Whether sync should be active */
   enabled?: boolean;
+  /** Map ID to join (0–9999). Sent with the auth message. */
+  mapId?: number;
 }
 
 /** Connection state exposed to consumers — maps MultiSyncState to legacy ConnectionState */
@@ -70,7 +72,7 @@ interface UseSceneSyncReturn {
   serverConnections: ServerConnectionSnapshot[];
 }
 
-export function useSceneSync({ syncUrls, syncUrl, enabled = true }: UseSceneSyncOptions): UseSceneSyncReturn {
+export function useSceneSync({ syncUrls, syncUrl, enabled = true, mapId }: UseSceneSyncOptions): UseSceneSyncReturn {
   const { user } = useCurrentUser();
 
   // Normalize URLs: support both single string and array
@@ -265,6 +267,7 @@ export function useSceneSync({ syncUrls, syncUrl, enabled = true }: UseSceneSync
         });
         return JSON.stringify(event);
       },
+      mapId,
     );
 
     return () => {
@@ -282,7 +285,7 @@ export function useSceneSync({ syncUrls, syncUrl, enabled = true }: UseSceneSync
       setPrivateChatMessages({});
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, urlsKey, user?.pubkey]);
+  }, [isActive, urlsKey, user?.pubkey, mapId]);
 
   // Track the current cell for AOI subscription updates
   const currentCellRef = useRef<string>('');

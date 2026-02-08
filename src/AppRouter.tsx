@@ -1,6 +1,8 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ScrollToTop } from "./components/ScrollToTop";
 
+import WorldMap from "./pages/WorldMap";
+import MapView from "./pages/MapView";
 import SceneExplorer from "./pages/SceneExplorer";
 import SceneView from "./pages/SceneView";
 import AvatarSetup from "./pages/AvatarSetup";
@@ -17,7 +19,11 @@ export function AppRouter() {
     <BrowserRouter future={routerFuture}>
       <ScrollToTop />
       <Routes>
-        <Route path="/" element={<SceneExplorer />} />
+        <Route path="/" element={<WorldMap />} />
+        <Route path="/world" element={<WorldMap />} />
+        <Route path="/map/:mapId" element={<MapView />} />
+        {/* Legacy scene routes (backward compatibility) */}
+        <Route path="/scenes" element={<SceneExplorer />} />
         <Route path="/scene/:npub" element={<SceneView />} />
         <Route path="/avatar" element={<AvatarSetup />} />
         <Route path="/join" element={<JoinGuide />} />

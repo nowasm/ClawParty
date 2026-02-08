@@ -2,17 +2,17 @@
  * WebSocket Scene Sync Manager
  *
  * Multi-server architecture: clients connect to ALL active sync servers
- * (up to 3) and pick the lowest-latency one as "primary" for position
- * downloads. All broadcast messages carry a `msgId` for deduplication.
+ * for a given map and pick the lowest-latency one as "primary" for
+ * position downloads. All broadcast messages carry a `msgId` for dedup.
  *
  * Authentication uses a Nostr-style challenge-response:
- *   1. Client connects and sends { type: "auth", pubkey }
+ *   1. Client connects and sends { type: "auth", pubkey, mapId }
  *   2. Server responds with { type: "auth_challenge", challenge }
  *   3. Client signs the challenge and sends { type: "auth_response", signature }
- *   4. Server verifies and sends { type: "welcome", peers }
+ *   4. Server verifies and sends { type: "welcome", peers, mapId }
  *
  * Message types (Client → Server):
- *   - "auth":          { pubkey }                 (start authentication)
+ *   - "auth":          { pubkey, mapId }          (start authentication)
  *   - "auth_response": { signature }              (respond to challenge)
  *   - "position":      { x, y, z, ry }           (avatar position + Y rotation)
  *   - "chat":          { text }                   (public chat message)
@@ -23,7 +23,8 @@
  *
  * Message types (Server → Client):
  *   - "auth_challenge": { challenge }                  (authentication challenge)
- *   - "welcome":        { peers }                      (initial state on connect)
+ *   - "welcome":        { peers, mapId }               (initial state on connect)
+ *   - "map_list":       { maps }                       (maps served by this node)
  *   - "peer_join":      { msgId, pubkey, avatar }      (new peer joined)
  *   - "peer_leave":     { msgId, pubkey }              (peer left)
  *   - "peer_position":  { msgId, pubkey, x, y, z, ry }(peer position update)
@@ -62,7 +63,7 @@ export interface PeerState {
 // ============================================================================
 
 export type ClientMessage =
-  | { type: 'auth'; pubkey: string }
+  | { type: 'auth'; pubkey: string; mapId?: number }
   | { type: 'auth_response'; signature: string }
   | { type: 'position'; x: number; y: number; z: number; ry: number }
   | { type: 'chat'; text: string }
@@ -92,7 +93,8 @@ export interface WelcomePeer {
  */
 export type ServerMessage =
   | { type: 'auth_challenge'; challenge: string }
-  | { type: 'welcome'; peers: WelcomePeer[] }
+  | { type: 'welcome'; peers: WelcomePeer[]; mapId?: number }
+  | { type: 'map_list'; maps: number[] }
   | { type: 'peer_join'; msgId: string; pubkey: string; avatar?: AvatarConfig }
   | { type: 'peer_leave'; msgId: string; pubkey: string }
   | { type: 'peer_position'; msgId: string; pubkey: string; x: number; y: number; z: number; ry: number }
@@ -135,6 +137,8 @@ export interface SceneSyncManagerOptions {
   pubkey: string;
   /** Sign a challenge string — returns the signature (hex) */
   sign: (challenge: string) => Promise<string>;
+  /** Map ID to join (0–9999). Sent with the auth message. */
+  mapId?: number;
 }
 
 export class SceneSyncManager {
@@ -142,6 +146,7 @@ export class SceneSyncManager {
   private pubkey: string;
   private syncUrl: string;
   private sign: (challenge: string) => Promise<string>;
+  private mapId?: number;
 
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -160,6 +165,7 @@ export class SceneSyncManager {
     this.pubkey = options.pubkey;
     this.syncUrl = options.syncUrl;
     this.sign = options.sign;
+    this.mapId = options.mapId;
   }
 
   get state(): ConnectionState {
@@ -184,10 +190,13 @@ export class SceneSyncManager {
     }
 
     this.ws.onopen = () => {
-      debugLog('ws open, sending auth');
+      debugLog('ws open, sending auth for map', this.mapId);
       this.reconnectAttempts = 0;
       this.setState('authenticating');
-      this.send({ type: 'auth', pubkey: this.pubkey });
+      const authMsg: ClientMessage = this.mapId !== undefined
+        ? { type: 'auth', pubkey: this.pubkey, mapId: this.mapId }
+        : { type: 'auth', pubkey: this.pubkey };
+      this.send(authMsg);
       this.startPing();
     };
 
