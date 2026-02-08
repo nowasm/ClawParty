@@ -13,7 +13,9 @@ import type {
   ServerMessage,
   WelcomePeer,
 } from './protocol.js';
+import { nextMsgId } from './protocol.js';
 import { generateChallenge, verifyAuthResponse } from './auth.js';
+import { cellFromPosition, validateCells } from './spatialGrid.js';
 
 /** Maximum chat message length */
 const MAX_CHAT_LENGTH = 500;
@@ -26,6 +28,10 @@ interface RoomClient {
   ws: WebSocket;
   pubkey: string;
   position: PeerPosition;
+  /** Current spatial cell based on position */
+  cell: string;
+  /** Cells this client is subscribed to (for AOI filtering) */
+  subscribedCells: Set<string>;
   avatar?: AvatarConfig;
   authenticated: boolean;
   challenge?: string;
@@ -69,6 +75,8 @@ export class Room {
       ws,
       pubkey: '',
       position: { x: 0, y: 0, z: 0, ry: 0 },
+      cell: '0,0',
+      subscribedCells: new Set<string>(),
       authenticated: false,
       lastActivity: Date.now(),
     };
@@ -102,6 +110,7 @@ export class Room {
       // Notify other clients
       this.broadcastExcept(ws, {
         type: 'peer_leave',
+        msgId: nextMsgId(),
         pubkey: client.pubkey,
       });
     }
@@ -154,6 +163,7 @@ export class Room {
       // Notify others about the new peer
       this.broadcastExcept(ws, {
         type: 'peer_join',
+        msgId: nextMsgId(),
         pubkey: client.pubkey,
         avatar: client.avatar,
       });
@@ -185,8 +195,11 @@ export class Room {
     switch (msg.type) {
       case 'position': {
         client.position = { x: msg.x, y: msg.y, z: msg.z, ry: msg.ry };
-        this.broadcastExcept(ws, {
+        client.cell = cellFromPosition(msg.x, msg.z);
+        // Only send position updates to clients subscribed to this cell
+        this.broadcastToSubscribers(ws, client.cell, {
           type: 'peer_position',
+          msgId: nextMsgId(),
           pubkey: client.pubkey,
           x: msg.x,
           y: msg.y,
@@ -196,11 +209,19 @@ export class Room {
         break;
       }
 
+      case 'subscribe_cells': {
+        if (!Array.isArray(msg.cells)) break;
+        const validated = validateCells(msg.cells);
+        client.subscribedCells = new Set(validated);
+        break;
+      }
+
       case 'chat': {
         const text = msg.text?.slice(0, MAX_CHAT_LENGTH);
         if (!text) break;
         this.broadcastExcept(ws, {
           type: 'peer_chat',
+          msgId: nextMsgId(),
           pubkey: client.pubkey,
           text,
         });
@@ -214,6 +235,7 @@ export class Room {
         if (targetWs) {
           this.send(targetWs, {
             type: 'peer_dm',
+            msgId: nextMsgId(),
             pubkey: client.pubkey,
             text: dmText,
           });
@@ -226,6 +248,7 @@ export class Room {
         if (!emoji) break;
         this.broadcastExcept(ws, {
           type: 'peer_emoji',
+          msgId: nextMsgId(),
           pubkey: client.pubkey,
           emoji,
         });
@@ -238,6 +261,7 @@ export class Room {
           // Re-broadcast join with updated avatar
           this.broadcastExcept(ws, {
             type: 'peer_join',
+            msgId: nextMsgId(),
             pubkey: client.pubkey,
             avatar: msg.avatar,
           });
@@ -272,9 +296,30 @@ export class Room {
     }
   }
 
+  /**
+   * Broadcast a message only to clients subscribed to a specific cell.
+   * If a client has no cell subscriptions (empty set), they receive all
+   * messages (backward compatibility / no AOI filtering).
+   */
+  private broadcastToSubscribers(exclude: WebSocket, cell: string, msg: ServerMessage): void {
+    const data = JSON.stringify(msg);
+    for (const [ws, client] of this.clients) {
+      if (ws === exclude || !client.authenticated || ws.readyState !== ws.OPEN) continue;
+      // If client has no subscriptions, send everything (backward compat)
+      // Otherwise, only send if they are subscribed to this cell
+      if (client.subscribedCells.size === 0 || client.subscribedCells.has(cell)) {
+        try {
+          ws.send(data);
+        } catch {
+          // Ignore send errors
+        }
+      }
+    }
+  }
+
   /** Broadcast a game event to all authenticated clients */
   broadcastGameEvent(event: string, data: unknown): void {
-    const msg: ServerMessage = { type: 'game_event', event, data };
+    const msg: ServerMessage = { type: 'game_event', msgId: nextMsgId(), event, data };
     const json = JSON.stringify(msg);
     for (const [ws, client] of this.clients) {
       if (client.authenticated && ws.readyState === ws.OPEN) {

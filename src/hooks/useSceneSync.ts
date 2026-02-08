@@ -1,12 +1,15 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import {
-  SceneSyncManager,
-  type PeerState,
-  type PeerPosition,
-  type ServerMessage,
-  type ConnectionState,
+  MultiSyncManager,
+  type MultiSyncState,
+} from '@/lib/multiSyncManager';
+import type {
+  PeerState,
+  PeerPosition,
+  ServerMessage,
 } from '@/lib/wsSync';
+import { cellFromPosition, getSubscriptionCells } from '@/lib/spatialGrid';
 
 /** Position state flush interval in ms (~15 fps) */
 const FLUSH_INTERVAL = 66;
@@ -25,11 +28,21 @@ export interface LiveChatMessage {
 const MAX_LIVE_CHAT = 100;
 
 interface UseSceneSyncOptions {
-  /** WebSocket sync server URL from scene metadata */
-  syncUrl: string | undefined;
+  /**
+   * WebSocket sync server URLs from scene metadata.
+   * Supports both a single URL string (backward compat) and an array.
+   */
+  syncUrls?: string | string[] | undefined;
+  /**
+   * @deprecated Use `syncUrls` instead. Kept for backward compatibility.
+   */
+  syncUrl?: string | undefined;
   /** Whether sync should be active */
   enabled?: boolean;
 }
+
+/** Connection state exposed to consumers — maps MultiSyncState to legacy ConnectionState */
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
 interface UseSceneSyncReturn {
   /** Map of remote peer pubkeys -> their latest state */
@@ -54,10 +67,24 @@ interface UseSceneSyncReturn {
   connectionState: ConnectionState;
 }
 
-export function useSceneSync({ syncUrl, enabled = true }: UseSceneSyncOptions): UseSceneSyncReturn {
+export function useSceneSync({ syncUrls, syncUrl, enabled = true }: UseSceneSyncOptions): UseSceneSyncReturn {
   const { user } = useCurrentUser();
 
-  const managerRef = useRef<SceneSyncManager | null>(null);
+  // Normalize URLs: support both single string and array
+  const resolvedUrls = useMemo(() => {
+    if (syncUrls) {
+      return Array.isArray(syncUrls) ? syncUrls : [syncUrls];
+    }
+    if (syncUrl) {
+      return [syncUrl];
+    }
+    return [];
+  }, [syncUrls, syncUrl]);
+
+  // Stable stringified key for the effect dependency
+  const urlsKey = resolvedUrls.join(',');
+
+  const managerRef = useRef<MultiSyncManager | null>(null);
   const [peerStates, setPeerStates] = useState<Record<string, PeerState>>({});
   const [connectedCount, setConnectedCount] = useState(0);
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
@@ -67,30 +94,17 @@ export function useSceneSync({ syncUrl, enabled = true }: UseSceneSyncOptions): 
   const liveChatRef = useRef<LiveChatMessage[]>([]);
   const privateChatRef = useRef<Record<string, LiveChatMessage[]>>({});
 
-  const isActive = !!user && !!syncUrl && enabled;
+  const isActive = !!user && resolvedUrls.length > 0 && enabled;
 
-  // Initialize WebSocket connection
+  // Initialize multi-server WebSocket connection
   useEffect(() => {
-    if (!isActive || !user || !syncUrl) return;
+    if (!isActive || !user || resolvedUrls.length === 0) return;
 
-    const manager = new SceneSyncManager({
-      syncUrl,
-      pubkey: user.pubkey,
-      sign: async (challenge: string) => {
-        // Use the signer to sign the challenge
-        // We create a kind-27235 event (NIP-98 style) with the challenge as content
-        const event = await user.signer.signEvent({
-          kind: 27235,
-          content: challenge,
-          tags: [],
-          created_at: Math.floor(Date.now() / 1000),
-        });
-        return JSON.stringify(event);
-      },
-    });
+    const manager = new MultiSyncManager();
     managerRef.current = manager;
 
-    manager.onStateChange = (state) => {
+    manager.onStateChange = (state: MultiSyncState) => {
+      // Map MultiSyncState to ConnectionState (they happen to match)
       setConnectionState(state);
     };
 
@@ -205,7 +219,6 @@ export function useSceneSync({ syncUrl, enabled = true }: UseSceneSyncOptions): 
 
         case 'game_event': {
           // Game events can be handled by consumers of this hook
-          // For now, just log in dev
           if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
             console.log('[SceneSync] Game event:', msg.event, msg.data);
           }
@@ -230,8 +243,20 @@ export function useSceneSync({ syncUrl, enabled = true }: UseSceneSyncOptions): 
       if (changed) setPeerStates({ ...peerStatesRef.current });
     }, FLUSH_INTERVAL);
 
-    // Connect
-    manager.connect();
+    // Connect to all servers
+    manager.connect(
+      resolvedUrls,
+      user.pubkey,
+      async (challenge: string) => {
+        const event = await user.signer.signEvent({
+          kind: 27235,
+          content: challenge,
+          tags: [],
+          created_at: Math.floor(Date.now() / 1000),
+        });
+        return JSON.stringify(event);
+      },
+    );
 
     return () => {
       clearInterval(flushInterval);
@@ -247,16 +272,30 @@ export function useSceneSync({ syncUrl, enabled = true }: UseSceneSyncOptions): 
       setPrivateChatMessages({});
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, syncUrl, user?.pubkey]);
+  }, [isActive, urlsKey, user?.pubkey]);
+
+  // Track the current cell for AOI subscription updates
+  const currentCellRef = useRef<string>('');
 
   const broadcastPosition = useCallback((pos: PeerPosition) => {
-    managerRef.current?.send({
+    const manager = managerRef.current;
+    if (!manager) return;
+
+    manager.send({
       type: 'position',
       x: pos.x,
       y: pos.y,
       z: pos.z,
       ry: pos.ry,
     });
+
+    // Check if player moved to a new cell → update subscriptions
+    const newCell = cellFromPosition(pos.x, pos.z);
+    if (newCell !== currentCellRef.current) {
+      currentCellRef.current = newCell;
+      const cells = getSubscriptionCells(pos.x, pos.z, 1); // 3x3 neighborhood
+      manager.send({ type: 'subscribe_cells', cells });
+    }
   }, []);
 
   const broadcastEmoji = useCallback((emoji: string) => {

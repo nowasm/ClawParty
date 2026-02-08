@@ -1,8 +1,9 @@
 /**
  * WebSocket Scene Sync Manager
  *
- * Uses a star topology: all clients connect to a central AI-hosted WebSocket server.
- * The server relays position updates, chat, and emoji between connected clients.
+ * Multi-server architecture: clients connect to ALL active sync servers
+ * (up to 3) and pick the lowest-latency one as "primary" for position
+ * downloads. All broadcast messages carry a `msgId` for deduplication.
  *
  * Authentication uses a Nostr-style challenge-response:
  *   1. Client connects and sends { type: "auth", pubkey }
@@ -21,17 +22,17 @@
  *   - "ping":          {}                         (keepalive)
  *
  * Message types (Server → Client):
- *   - "auth_challenge": { challenge }             (authentication challenge)
- *   - "welcome":        { peers }                 (initial state on connect)
- *   - "peer_join":      { pubkey, avatar }        (new peer joined)
- *   - "peer_leave":     { pubkey }                (peer left)
- *   - "peer_position":  { pubkey, x, y, z, ry }  (peer position update)
- *   - "peer_chat":      { pubkey, text }          (peer chat message)
- *   - "peer_dm":        { pubkey, text }          (private message from peer)
- *   - "peer_emoji":     { pubkey, emoji }         (peer emoji reaction)
- *   - "pong":           {}                        (keepalive response)
- *   - "error":          { message, code? }        (error message)
- *   - "game_event":     { event, data }           (custom game event from AI)
+ *   - "auth_challenge": { challenge }                  (authentication challenge)
+ *   - "welcome":        { peers }                      (initial state on connect)
+ *   - "peer_join":      { msgId, pubkey, avatar }      (new peer joined)
+ *   - "peer_leave":     { msgId, pubkey }              (peer left)
+ *   - "peer_position":  { msgId, pubkey, x, y, z, ry }(peer position update)
+ *   - "peer_chat":      { msgId, pubkey, text }        (peer chat message)
+ *   - "peer_dm":        { msgId, pubkey, text }        (private message from peer)
+ *   - "peer_emoji":     { msgId, pubkey, emoji }       (peer emoji reaction)
+ *   - "pong":           {}                             (keepalive response)
+ *   - "error":          { message, code? }             (error message)
+ *   - "game_event":     { msgId, event, data }         (custom game event from AI)
  */
 
 import type { AvatarConfig } from './scene';
@@ -68,6 +69,7 @@ export type ClientMessage =
   | { type: 'dm'; to: string; text: string }
   | { type: 'emoji'; emoji: string }
   | { type: 'join'; avatar: AvatarConfig }
+  | { type: 'subscribe_cells'; cells: string[] }
   | { type: 'ping' };
 
 // ============================================================================
@@ -80,18 +82,26 @@ export interface WelcomePeer {
   avatar?: AvatarConfig;
 }
 
+/**
+ * Messages broadcast to multiple clients carry a `msgId` field.
+ * This allows clients connected to multiple sync servers to
+ * deduplicate messages they receive from different servers.
+ *
+ * Non-broadcast messages (auth_challenge, welcome, pong, error)
+ * are per-connection and do NOT carry a msgId.
+ */
 export type ServerMessage =
   | { type: 'auth_challenge'; challenge: string }
   | { type: 'welcome'; peers: WelcomePeer[] }
-  | { type: 'peer_join'; pubkey: string; avatar?: AvatarConfig }
-  | { type: 'peer_leave'; pubkey: string }
-  | { type: 'peer_position'; pubkey: string; x: number; y: number; z: number; ry: number }
-  | { type: 'peer_chat'; pubkey: string; text: string }
-  | { type: 'peer_dm'; pubkey: string; text: string }
-  | { type: 'peer_emoji'; pubkey: string; emoji: string }
+  | { type: 'peer_join'; msgId: string; pubkey: string; avatar?: AvatarConfig }
+  | { type: 'peer_leave'; msgId: string; pubkey: string }
+  | { type: 'peer_position'; msgId: string; pubkey: string; x: number; y: number; z: number; ry: number }
+  | { type: 'peer_chat'; msgId: string; pubkey: string; text: string }
+  | { type: 'peer_dm'; msgId: string; pubkey: string; text: string }
+  | { type: 'peer_emoji'; msgId: string; pubkey: string; emoji: string }
   | { type: 'pong' }
   | { type: 'error'; message: string; code?: string }
-  | { type: 'game_event'; event: string; data: unknown };
+  | { type: 'game_event'; msgId: string; event: string; data: unknown };
 
 // ============================================================================
 // Connection State

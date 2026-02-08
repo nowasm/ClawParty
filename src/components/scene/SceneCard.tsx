@@ -64,7 +64,7 @@ export function SceneCard({ scene }: SceneCardProps) {
           </div>
 
           {/* Sync indicator */}
-          {scene.syncUrl && (
+          {scene.syncUrls.length > 0 && (
             <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm text-white rounded-full px-2 py-0.5 text-xs">
               AI Hosted
             </div>

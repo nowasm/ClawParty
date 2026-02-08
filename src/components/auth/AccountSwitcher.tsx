@@ -1,7 +1,7 @@
 // NOTE: This file is stable and usually should not be modified.
 // It is important that all functionality in this file is preserved, and should only be modified if explicitly requested.
 
-import { ChevronDown, LogOut, UserIcon, UserPlus } from 'lucide-react';
+import { ChevronDown, LogOut, UserIcon } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,11 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar.tsx'
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
 import { genUserName } from '@/lib/genUserName';
 
-interface AccountSwitcherProps {
-  onAddAccountClick: () => void;
-}
-
-export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
+export function AccountSwitcher() {
   const { currentUser, otherUsers, setLogin, removeLogin } = useLoggedInAccounts();
 
   if (!currentUser) return null;
@@ -59,13 +55,6 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={onAddAccountClick}
-          className='flex items-center gap-2 cursor-pointer p-2 rounded-md'
-        >
-          <UserPlus className='w-4 h-4' />
-          <span>Add another account</span>
-        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => removeLogin(currentUser.id)}
           className='flex items-center gap-2 cursor-pointer p-2 rounded-md text-red-500'

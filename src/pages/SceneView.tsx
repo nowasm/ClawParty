@@ -74,7 +74,7 @@ const SceneView = () => {
     isActive: syncActive,
     connectionState,
   } = useSceneSync({
-    syncUrl: scene?.syncUrl,
+    syncUrls: scene?.syncUrls,
     enabled: !!user && !!pubkey,
   });
 
@@ -169,7 +169,7 @@ const SceneView = () => {
   // Connection status label
   const connectionLabel = connectionState === 'connected'
     ? `Server (${connectedCount})`
-    : connectionState === 'connecting' || connectionState === 'authenticating'
+    : connectionState === 'connecting'
       ? 'Connecting...'
       : 'Offline';
 
@@ -234,7 +234,7 @@ const SceneView = () => {
               >
                 {syncActive ? (
                   <Wifi className="h-3 w-3" />
-                ) : connectionState === 'connecting' || connectionState === 'authenticating' ? (
+                ) : connectionState === 'connecting' ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
                   <WifiOff className="h-3 w-3" />

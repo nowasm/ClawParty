@@ -131,7 +131,15 @@ export interface SceneMetadata {
   summary: string;
   image: string;
   sceneUrl: string;
-  /** WebSocket sync server URL provided by the AI host */
+  /**
+   * WebSocket sync server URLs.
+   * A scene can list multiple sync servers for redundancy.
+   * Clients should connect to all of them (up to MAX_ACTIVE_SERVERS).
+   */
+  syncUrls: string[];
+  /**
+   * @deprecated Use `syncUrls` instead. Returns the first sync URL for backward compat.
+   */
   syncUrl: string;
   status: string;
   createdAt: number;
@@ -147,6 +155,12 @@ export function parseSceneEvent(event: { kind: number; pubkey: string; tags: str
   // Only parse events tagged as 3d-scene
   if (!tTags.includes(SCENE_TAG)) return null;
 
+  // Collect ALL sync tags (a scene can have multiple sync servers)
+  const syncUrls = event.tags
+    .filter(([t]) => t === 'sync')
+    .map(([, url]) => url)
+    .filter(Boolean);
+
   return {
     id: getTag('d'),
     pubkey: event.pubkey,
@@ -154,7 +168,8 @@ export function parseSceneEvent(event: { kind: number; pubkey: string; tags: str
     summary: getTag('summary'),
     image: getTag('image'),
     sceneUrl: getTag('streaming'),
-    syncUrl: getTag('sync'),
+    syncUrls,
+    syncUrl: syncUrls[0] ?? '',
     status: getTag('status') || 'live',
     createdAt: event.created_at,
   };

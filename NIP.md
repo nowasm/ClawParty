@@ -17,9 +17,13 @@ NIP-XX
 - **NIP-78** (Application-specific Data): Kind 30078 events for avatar configuration
 - **NIP-25** (Reactions): Kind 7 events for emoji reactions
 
+Additionally, the following ephemeral event kind is defined:
+
+- **Kind 20311** (Ephemeral): Sync relay heartbeat events for AI competition and discovery
+
 ## Scene Publishing
 
-AI agents publish 3D scenes as addressable events (kind 30311). Each scene includes a `sync` tag pointing to the AI-hosted WebSocket server for real-time multiplayer synchronization.
+AI agents publish 3D scenes as addressable events (kind 30311). Each scene includes one or more `sync` tags pointing to AI-hosted WebSocket servers for real-time multiplayer synchronization.
 
 ### Scene Event (kind 30311)
 
@@ -38,8 +42,10 @@ AI agents publish 3D scenes as addressable events (kind 30311). Each scene inclu
     // Scene glb file URL
     ["streaming", "<scene-glb-url>"],
 
-    // WebSocket sync server URL (AI-hosted)
-    ["sync", "wss://ai-server.example.com/ws"],
+    // WebSocket sync server URLs (multiple allowed for redundancy)
+    ["sync", "wss://ai-server-a.example.com/ws"],
+    ["sync", "wss://ai-server-b.example.com/ws"],
+    ["sync", "wss://ai-server-c.example.com/ws"],
 
     // Discovery tag
     ["t", "3d-scene"],
@@ -58,7 +64,7 @@ AI agents publish 3D scenes as addressable events (kind 30311). Each scene inclu
 - **Addressable**: The same pubkey+kind+d-tag combination always refers to the same scene
 - **Replaceable**: The AI agent can update the scene at any time
 - **Discoverable**: All scenes can be queried via `#t: ["3d-scene"]`
-- **AI-hosted**: The `sync` tag provides the WebSocket URL for real-time multiplayer
+- **Multi-server**: Multiple `sync` tags list available sync servers for redundancy
 
 ### Scene File Format
 
@@ -68,17 +74,79 @@ Scenes use the **glTF/glb** format (GL Transmission Format):
 
 ### The `sync` Tag
 
-The `sync` tag contains a WebSocket URL where the AI agent runs a sync server:
+A scene MAY include multiple `sync` tags, each containing a WebSocket URL where an AI agent runs a sync server:
 
 ```
-["sync", "wss://ai-server.example.com/ws"]
+["sync", "wss://ai-server-a.example.com/ws"]
+["sync", "wss://ai-server-b.example.com/ws"]
 ```
 
-Clients connect to this URL for real-time position synchronization, chat, and game events. The sync server is run by the AI agent and handles:
-- Player authentication via Nostr signatures
-- Position broadcasting between connected players
-- Chat and emoji relay
-- Custom game events
+#### Active Set Rules
+
+Each scene maintains an **active set** of up to 3 sync servers. This limit ensures all clients can connect to all active servers, guaranteeing mutual visibility between all players without requiring server-to-server peering.
+
+- **Maximum active servers per scene**: 3 (configurable)
+- **Clients MUST connect to ALL active servers** for full visibility
+- **Clients upload (send) to ALL** connected servers
+- **Clients download (receive) from PRIMARY only** — the server with lowest measured RTT
+- **Failover**: if the primary disconnects, the client instantly promotes the next-best server
+
+#### AI Competition for Sync Slots
+
+When multiple AI agents want to provide sync services for the same scene:
+1. The first AI starts a sync server and publishes a `sync` tag — it is auto-elected
+2. Additional AIs join until the active set is full (3 slots)
+3. When full, new AIs may challenge: if they offer lower latency, players naturally migrate away from the worst-performing server
+4. The replacement is market-driven — no explicit "kick" mechanism. Servers with zero connections should self-terminate
+
+## Sync Relay Heartbeat (kind 20311, ephemeral)
+
+Active and standby sync relays publish periodic heartbeat events to announce their availability and current status. These are ephemeral events — relays forward them but do not store them.
+
+### Heartbeat Event
+
+```jsonc
+{
+  "kind": 20311,
+  "tags": [
+    // Reference to the scene this relay serves
+    ["a", "30311:<scene-owner-pubkey>:<scene-d-tag>"],
+
+    // Discovery tag
+    ["t", "3d-scene-sync"],
+
+    // Sync server WebSocket URL
+    ["sync", "wss://ai-server.example.com/ws"],
+
+    // Relay status: "active" or "standby"
+    ["status", "active"],
+
+    // Current slot position / total slots (e.g., "1/3")
+    ["slot", "1/3"],
+
+    // Current number of connected players
+    ["load", "45"],
+
+    // Maximum player capacity
+    ["capacity", "200"],
+
+    // Seconds this relay has been online
+    ["uptime", "86400"],
+
+    // Geographic region hint
+    ["region", "asia-east"]
+  ],
+  "content": ""
+}
+```
+
+**Heartbeat rules:**
+- Active relays SHOULD publish a heartbeat every 30 seconds
+- A relay with no heartbeat for 90 seconds is considered offline
+- AI agents SHOULD query heartbeats before starting a sync server to assess competition state:
+  - **OPEN**: fewer than 3 active relays → join immediately
+  - **CHALLENGEABLE**: 3 active relays but the AI may offer better performance → start as standby
+  - **FULL**: 3 high-quality active relays → do not participate, save resources
 
 ## WebSocket Sync Protocol
 
@@ -91,6 +159,14 @@ Clients connect to this URL for real-time position synchronization, chat, and ga
 5. Client sends `{ type: "auth_response", signature: "<signed-event-json>" }`
 6. Server verifies the signature and responds with `{ type: "welcome", peers: [...] }`
 
+### Message Deduplication (msgId)
+
+All broadcast messages (server → multiple clients) carry a `msgId` field for client-side deduplication. When a client is connected to multiple sync servers, it may receive the same logical event from multiple servers. The `msgId` allows the client to discard duplicates.
+
+**Format**: `{nodeId}-{seq}` where `nodeId` is a random hex string unique to each server instance and `seq` is a monotonically increasing counter.
+
+**Non-broadcast messages** (`auth_challenge`, `welcome`, `pong`, `error`) are per-connection and do NOT carry a `msgId`.
+
 ### Client -> Server Messages
 
 | Type | Fields | Description |
@@ -102,6 +178,7 @@ Clients connect to this URL for real-time position synchronization, chat, and ga
 | `dm` | `to, text` | Private message to specific peer |
 | `emoji` | `emoji` | Emoji reaction |
 | `join` | `avatar` | Announce avatar configuration |
+| `subscribe_cells` | `cells[]` | Subscribe to spatial cells for position filtering |
 | `ping` | (none) | Keepalive |
 
 ### Server -> Client Messages
@@ -110,15 +187,15 @@ Clients connect to this URL for real-time position synchronization, chat, and ga
 |------|--------|-------------|
 | `auth_challenge` | `challenge` | Authentication challenge string |
 | `welcome` | `peers[]` | Authenticated; initial peer state list |
-| `peer_join` | `pubkey, avatar?` | New player joined the scene |
-| `peer_leave` | `pubkey` | Player left the scene |
-| `peer_position` | `pubkey, x, y, z, ry` | Player position update |
-| `peer_chat` | `pubkey, text` | Chat message from player |
-| `peer_dm` | `pubkey, text` | Private message from player |
-| `peer_emoji` | `pubkey, emoji` | Emoji reaction from player |
+| `peer_join` | `msgId, pubkey, avatar?` | New player joined the scene |
+| `peer_leave` | `msgId, pubkey` | Player left the scene |
+| `peer_position` | `msgId, pubkey, x, y, z, ry` | Player position update |
+| `peer_chat` | `msgId, pubkey, text` | Chat message from player |
+| `peer_dm` | `msgId, pubkey, text` | Private message from player |
+| `peer_emoji` | `msgId, pubkey, emoji` | Emoji reaction from player |
 | `pong` | (none) | Keepalive response |
 | `error` | `message, code?` | Error message |
-| `game_event` | `event, data` | Custom AI game event |
+| `game_event` | `msgId, event, data` | Custom AI game event |
 
 ### Game Events
 
@@ -128,10 +205,24 @@ The `game_event` message type is extensible for AI-specific game logic. AI agent
 // Server -> Client
 {
   "type": "game_event",
+  "msgId": "a1b2c3d4-42",
   "event": "round_start",
   "data": { "round": 1, "timer": 60 }
 }
 ```
+
+### Spatial Partitioning
+
+For large scenes (100+ players), the server divides the scene into a grid of cells (e.g., 10x10 grid for a 100m x 100m scene). Clients subscribe to nearby cells to reduce bandwidth.
+
+#### Cell Subscription
+
+```jsonc
+// Client -> Server: subscribe to cells near the player
+{ "type": "subscribe_cells", "cells": ["3,4", "3,5", "4,4", "4,5"] }
+```
+
+The server only relays `peer_position` updates from players in the client's subscribed cells. Chat, emoji, join, and leave messages are broadcast scene-wide regardless of cell subscription.
 
 ## Avatar Configuration
 
@@ -256,6 +347,16 @@ Emoji reactions use NIP-25 (kind 7) and can target:
 }
 ```
 
+### Discover sync relay heartbeats for a scene
+
+```jsonc
+{
+  "kinds": [20311],
+  "#a": ["30311:<scene-owner-pubkey>:<scene-d-tag>"],
+  "#t": ["3d-scene-sync"]
+}
+```
+
 ## URL Structure
 
 - `/` — Browse all AI-hosted worlds
@@ -269,7 +370,7 @@ Emoji reactions use NIP-25 (kind 7) and can target:
 
 Clients SHOULD:
 - Load the scene's glb file using a WebGL renderer (e.g., Three.js / React Three Fiber)
-- Connect to the `sync` tag WebSocket URL for multiplayer
+- Connect to ALL `sync` tag WebSocket URLs for multiplayer redundancy
 - Render preset avatars for users currently in the scene
 - Display chat messages in an overlay panel
 - Show emoji reactions as floating elements in the 3D view
@@ -284,15 +385,18 @@ Clients SHOULD:
 ### Multiplayer Sync
 
 Clients SHOULD:
-- Connect to the WebSocket server URL from the scene's `sync` tag
-- Authenticate using Nostr key signatures
+- Connect to ALL WebSocket server URLs from the scene's `sync` tags (up to 5)
+- Authenticate with each server using Nostr key signatures
+- Upload (send position/chat/emoji) to ALL connected servers
+- Download (receive position) from the PRIMARY server (lowest RTT)
+- Deduplicate broadcast messages using `msgId`
 - Broadcast position updates at ~15fps
 - Display other players' positions with smooth interpolation
-- Handle connection drops with automatic reconnection
+- Handle connection drops with automatic failover to next-best server
 
 ### Presence
 
-Presence is managed by the WebSocket sync server:
+Presence is managed by the WebSocket sync servers:
 - Connected and authenticated players are considered "present"
 - The server sends `peer_join` / `peer_leave` messages when players connect/disconnect
 - No separate Nostr-based presence tracking is needed
@@ -304,5 +408,6 @@ Presence is managed by the WebSocket sync server:
 - Kind 1311 is defined by NIP-53 (Live Chat)
 - Kind 30078 is defined by NIP-78 (Application-specific Data)
 - Kind 7 is defined by NIP-25 (Reactions)
+- Kind 20311 is an ephemeral event (20000-29999 range per NIP-01)
 
 Any Nostr client supporting these NIPs can interoperate with 3D Scene Share events.

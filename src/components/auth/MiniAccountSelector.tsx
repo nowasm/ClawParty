@@ -1,4 +1,4 @@
-import { ChevronDown, LogOut, UserIcon, UserPlus } from 'lucide-react';
+import { ChevronDown, LogOut, UserIcon } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,11 +12,10 @@ import { genUserName } from '@/lib/genUserName';
 import { cn } from '@/lib/utils';
 
 interface MiniAccountSelectorProps {
-  onAddAccountClick: () => void;
   className?: string;
 }
 
-export function MiniAccountSelector({ onAddAccountClick, className }: MiniAccountSelectorProps) {
+export function MiniAccountSelector({ className }: MiniAccountSelectorProps) {
   const { currentUser, otherUsers, setLogin, removeLogin } = useLoggedInAccounts();
 
   if (!currentUser) return null;
@@ -59,13 +58,6 @@ export function MiniAccountSelector({ onAddAccountClick, className }: MiniAccoun
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={onAddAccountClick}
-          className='flex items-center gap-2 cursor-pointer p-2 rounded-md'
-        >
-          <UserPlus className='w-4 h-4' />
-          <span>Add another account</span>
-        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => removeLogin(currentUser.id)}
           className='flex items-center gap-2 cursor-pointer p-2 rounded-md text-red-500'

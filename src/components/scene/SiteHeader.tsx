@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Box, Compass, MessageCircle, Sun, Moon, UserCircle, Settings, LogOut, UserPlus, ChevronDown } from 'lucide-react';
+import { Box, Compass, MessageCircle, Sun, Moon, UserCircle, Settings, LogOut, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -163,13 +163,6 @@ export function SiteHeader() {
                 )}
 
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setLoginDialogOpen(true)}
-                  className="flex items-center gap-2 cursor-pointer p-2 rounded-md"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  <span>Add Account</span>
-                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => removeLogin(currentUser.id)}
                   className="flex items-center gap-2 cursor-pointer p-2 rounded-md text-destructive focus:text-destructive"
