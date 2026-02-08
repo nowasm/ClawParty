@@ -41,22 +41,32 @@ export interface SyncServerInfo {
 function parseHeartbeatEvent(event: NostrEvent, mapId: number): SyncServerInfo | null {
   const tags = event.tags;
 
-  const syncTag = tags.find(([name]) => name === 'sync');
-  const loadTag = tags.find(([name]) => name === 'load');
-  const statusTag = tags.find(([name]) => name === 'status');
-  const regionTag = tags.find(([name]) => name === 'region');
+  const getTag = (name: string) => tags.find(([t]) => t === name)?.[1] ?? '';
+
+  const syncUrl = getTag('sync');
+  if (!syncUrl) return null;
+
+  const statusVal = getTag('status') || 'active';
+  // Reject offline/standby nodes — only 'active' (or legacy 'online') are usable
+  if (statusVal === 'offline' || statusVal === 'standby') return null;
+
   const servesAllTag = tags.find(([name, val]) => name === 'serves' && val === 'all');
 
-  if (!syncTag?.[1]) return null;
+  // Parse load — supports both new format (single number) and legacy "current/max"
+  const loadStr = getTag('load') || '0';
+  let currentPlayers: number;
+  let maxPlayers: number;
 
-  const status = (statusTag?.[1] ?? 'online') as 'online' | 'offline';
-  if (status === 'offline') return null;
-
-  // Parse load
-  const loadStr = loadTag?.[1] ?? '0/200';
-  const loadParts = loadStr.split('/');
-  const currentPlayers = parseInt(loadParts[0], 10) || 0;
-  const maxPlayers = parseInt(loadParts[1], 10) || 200;
+  if (loadStr.includes('/')) {
+    // Legacy format: "current/max"
+    const parts = loadStr.split('/');
+    currentPlayers = parseInt(parts[0], 10) || 0;
+    maxPlayers = parseInt(parts[1], 10) || 200;
+  } else {
+    // New format: single number for load, separate capacity tag
+    currentPlayers = parseInt(loadStr, 10) || 0;
+    maxPlayers = parseInt(getTag('capacity'), 10) || 200;
+  }
 
   // Find the specific map tag to get per-map player count
   const mapTag = tags.find(([name, val]) => name === 'map' && val === mapId.toString());
@@ -67,12 +77,12 @@ function parseHeartbeatEvent(event: NostrEvent, mapId: number): SyncServerInfo |
   if (now - event.created_at > 180) return null;
 
   return {
-    syncUrl: syncTag[1],
-    load: loadStr,
+    syncUrl,
+    load: `${currentPlayers}/${maxPlayers}`,
     currentPlayers,
     maxPlayers,
-    region: regionTag?.[1] ?? '',
-    status,
+    region: getTag('region'),
+    status: 'online',
     mapPlayers: isNaN(mapPlayers) ? 0 : mapPlayers,
     servesAll: !!servesAllTag,
     pubkey: event.pubkey,

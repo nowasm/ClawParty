@@ -41,31 +41,57 @@ export interface AnnouncerConfig {
   maxPlayers: number;
   /** Room manager to query for map/player info */
   roomManager: RoomManager;
+  /**
+   * Scene d-tag for scene-based discovery.
+   * When set, heartbeats include an `a` tag with the scene address
+   * (30311:<pubkey>:<dTag>) so clients using useSyncRelays can discover
+   * this sync server by scene address.
+   */
+  sceneDTag?: string;
 }
 
 /**
  * Build a kind 20311 ephemeral heartbeat event.
+ *
+ * Tags serve two discovery paths:
+ *   1. Map-based: `#map` tags → used by useMapSyncServers (MapView)
+ *   2. Scene-based: `#a` tag → used by useSyncRelays (SceneView)
+ *
+ * Both paths query `#t: ["3d-scene-sync"]` as the discovery filter.
  */
 function buildHeartbeatEvent(
   config: AnnouncerConfig,
   status: 'online' | 'offline',
+  uptimeSeconds: number,
 ): EventTemplate {
   const servedMaps = config.roomManager.getServedMapIds();
   const playerCounts = config.roomManager.getPlayerCounts();
   const totalPlayers = config.roomManager.getTotalPlayerCount();
 
+  // Map status to the format useSyncRelays expects: 'active' | 'standby'
+  const syncRelayStatus = status === 'online' ? 'active' : 'standby';
+
   const tags: string[][] = [
     ['t', '3d-scene-sync'],
     ['sync', config.syncUrl],
-    ['load', `${totalPlayers}/${config.maxPlayers}`],
-    ['status', status],
+    ['status', syncRelayStatus],
+    ['load', totalPlayers.toString()],
+    ['capacity', config.maxPlayers.toString()],
+    ['uptime', uptimeSeconds.toString()],
   ];
 
   if (config.region) {
     tags.push(['region', config.region]);
   }
 
-  // Add map tags for each served map
+  // Add scene address tag for scene-based discovery (useSyncRelays)
+  if (config.sceneDTag) {
+    const pubkey = getPublicKey(config.secretKey);
+    tags.push(['a', `30311:${pubkey}:${config.sceneDTag}`]);
+    tags.push(['slot', `1/${Math.max(1, totalPlayers > 0 ? 1 : 1)}`]);
+  }
+
+  // Add map tags for map-based discovery (useMapSyncServers)
   if (servedMaps === 'all') {
     // For "all" mode, just advertise maps that have active rooms
     // (advertising all 10,000 would be too much)
@@ -148,13 +174,22 @@ export class Announcer {
   private config: AnnouncerConfig;
   private timer: ReturnType<typeof setInterval> | null = null;
   private destroyed = false;
+  private startedAt = 0;
 
   constructor(config: AnnouncerConfig) {
     this.config = config;
   }
 
+  /** Get uptime in seconds since start() was called */
+  private getUptimeSeconds(): number {
+    if (this.startedAt === 0) return 0;
+    return Math.floor((Date.now() - this.startedAt) / 1000);
+  }
+
   /** Start publishing heartbeats */
   async start(): Promise<void> {
+    this.startedAt = Date.now();
+
     const pubkey = getPublicKey(this.config.secretKey);
     const npub = nip19.npubEncode(pubkey);
 
@@ -163,6 +198,9 @@ export class Announcer {
     console.log(`[Announcer]   Pubkey: ${npub}`);
     console.log(`[Announcer]   Sync:   ${this.config.syncUrl}`);
     console.log(`[Announcer]   Region: ${this.config.region || '(not set)'}`);
+    if (this.config.sceneDTag) {
+      console.log(`[Announcer]   Scene:  30311:${pubkey}:${this.config.sceneDTag}`);
+    }
 
     // Publish first heartbeat immediately
     await this.publishHeartbeat('online');
@@ -178,7 +216,7 @@ export class Announcer {
   /** Publish a heartbeat event */
   private async publishHeartbeat(status: 'online' | 'offline'): Promise<void> {
     try {
-      const template = buildHeartbeatEvent(this.config, status);
+      const template = buildHeartbeatEvent(this.config, status, this.getUptimeSeconds());
       const event = finalizeEvent(template, this.config.secretKey);
       const accepted = await publishToRelays(event);
 
@@ -187,7 +225,8 @@ export class Announcer {
 
       console.log(
         `[Announcer] Heartbeat ${status}: ${accepted}/${DEFAULT_RELAYS.length} relays, ` +
-        `${totalPlayers} players, ${activeRooms} active rooms`,
+        `${totalPlayers} players, ${activeRooms} active rooms, ` +
+        `uptime ${this.getUptimeSeconds()}s`,
       );
     } catch (err) {
       console.error(`[Announcer] Failed to publish heartbeat: ${(err as Error).message}`);

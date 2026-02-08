@@ -25,6 +25,7 @@ import { RoomManager } from './roomManager.js';
 import { isValidMapId } from './mapRegistry.js';
 import { Announcer, parseSecretKey } from './announcer.js';
 import { MapSelector } from './mapSelector.js';
+import { publishScene, unpublishScene, type ScenePublishConfig } from './publish.js';
 import type { ClientMessage, ServerMessage } from './protocol.js';
 
 // ============================================================================
@@ -39,6 +40,13 @@ const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS ?? '200', 10);
 const NOSTR_SECRET_KEY = process.env.NOSTR_SECRET_KEY ?? '';
 const CLEANUP_INTERVAL_MS = 30000; // Clean up idle connections every 30s
 const MAX_IDLE_MS = 120000; // Disconnect after 2 minutes of inactivity
+
+// Scene auto-publish configuration (optional)
+const SCENE_TITLE = process.env.SCENE_TITLE ?? 'AI World';
+const SCENE_SUMMARY = process.env.SCENE_SUMMARY ?? '';
+const SCENE_IMAGE = process.env.SCENE_IMAGE ?? '';
+const SCENE_PRESET = process.env.SCENE_PRESET ?? '';
+const SCENE_DTAG = process.env.SCENE_DTAG ?? 'my-world';
 
 /**
  * Parse the SERVED_MAPS environment variable.
@@ -101,13 +109,26 @@ if (NOSTR_SECRET_KEY) {
     process.exit(1);
   }
 }
+// Build scene publish config (used for auto-publish and announcer scene address)
+let scenePublishConfig: ScenePublishConfig | null = null;
 if (secretKey && SYNC_URL) {
+  scenePublishConfig = {
+    secretKey,
+    syncUrl: SYNC_URL,
+    dTag: SCENE_DTAG,
+    title: SCENE_TITLE,
+    summary: SCENE_SUMMARY,
+    image: SCENE_IMAGE,
+    preset: SCENE_PRESET,
+  };
+
   announcer = new Announcer({
     secretKey,
     syncUrl: SYNC_URL,
     region: NODE_REGION,
     maxPlayers: MAX_PLAYERS,
     roomManager,
+    sceneDTag: SCENE_DTAG,
   });
 }
 
@@ -255,7 +276,16 @@ wss.on('listening', async () => {
     console.log(`[MapSelector] Auto-selected ${selected.length} maps to serve`);
   }
 
-  // Start heartbeat announcer if configured
+  // Auto-publish scene and start heartbeat if configured
+  if (scenePublishConfig) {
+    // Publish scene (kind 30311) so it appears on ClawParty
+    try {
+      await publishScene(scenePublishConfig);
+    } catch (err) {
+      console.error(`[Startup] Failed to publish scene: ${(err as Error).message}`);
+    }
+  }
+
   if (announcer) {
     await announcer.start();
   } else if (!NOSTR_SECRET_KEY) {
@@ -294,6 +324,15 @@ async function shutdown() {
       await announcer.stop();
     } catch (err) {
       console.error(`[Shutdown] Failed to stop announcer: ${(err as Error).message}`);
+    }
+  }
+
+  // Unpublish scene (set status to "ended")
+  if (scenePublishConfig) {
+    try {
+      await unpublishScene(scenePublishConfig);
+    } catch (err) {
+      console.error(`[Shutdown] Failed to unpublish scene: ${(err as Error).message}`);
     }
   }
 
