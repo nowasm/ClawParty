@@ -124,14 +124,25 @@ export class Room {
     const client = this.clients.get(ws);
     if (!client) return;
 
+    // Remove event listeners to prevent stale handler invocation
+    ws.removeAllListeners('message');
+    ws.removeAllListeners('close');
+    ws.removeAllListeners('error');
+
     if (client.authenticated && client.pubkey) {
-      this.pubkeyIndex.delete(client.pubkey);
-      // Notify other clients
-      this.broadcastExcept(ws, {
-        type: 'peer_leave',
-        msgId: nextMsgId(),
-        pubkey: client.pubkey,
-      });
+      // Only remove from pubkeyIndex if this ws is still the current one for this pubkey.
+      // On reconnect, the new connection replaces the old one in the index,
+      // so the old connection's async close handler must NOT delete the new entry.
+      if (this.pubkeyIndex.get(client.pubkey) === ws) {
+        this.pubkeyIndex.delete(client.pubkey);
+        // Only broadcast peer_leave if we actually removed from the index,
+        // otherwise the user is still connected via a newer socket.
+        this.broadcastExcept(ws, {
+          type: 'peer_leave',
+          msgId: nextMsgId(),
+          pubkey: client.pubkey,
+        });
+      }
     }
 
     this.clients.delete(ws);
@@ -164,11 +175,15 @@ export class Room {
         return;
       }
 
-      // Kick existing connection for same pubkey (reconnect scenario)
+      // Kick existing connection for same pubkey (reconnect scenario).
+      // IMPORTANT: Clean up synchronously BEFORE closing, so that:
+      //   1. peer_leave is broadcast before peer_join (correct ordering)
+      //   2. pubkeyIndex is not corrupted by the async close handler
       const existing = this.pubkeyIndex.get(client.pubkey);
       if (existing && existing !== ws) {
         this.send(existing, { type: 'error', message: 'Replaced by new connection', code: 'REPLACED' });
-        existing.close();
+        this.removeConnection(existing); // Clean up synchronously first
+        existing.close();                // Then close the socket
       }
 
       client.authenticated = true;
@@ -354,11 +369,16 @@ export class Room {
   /** Clean up inactive connections (call periodically) */
   cleanupInactive(maxIdleMs: number = 60000): void {
     const now = Date.now();
+    // Collect stale connections first, then clean up (avoid mutation during iteration)
+    const stale: WebSocket[] = [];
     for (const [ws, client] of this.clients) {
       if (now - client.lastActivity > maxIdleMs) {
-        ws.close();
-        this.removeConnection(ws);
+        stale.push(ws);
       }
+    }
+    for (const ws of stale) {
+      this.removeConnection(ws); // Clean up synchronously (removes listeners)
+      ws.close();
     }
   }
 

@@ -160,35 +160,55 @@ wss.on('connection', (ws, req) => {
   const ip = req.socket.remoteAddress ?? 'unknown';
   console.log(`[Connect] New connection from ${ip} (total: ${wss.clients.size})`);
 
-  // Check total capacity
-  if (roomManager.getTotalPlayerCount() >= MAX_PLAYERS) {
+  // Check total capacity (include pending unauthenticated connections)
+  if (roomManager.getTotalPlayerCount() + pendingConnections.size >= MAX_PLAYERS) {
     sendMsg(ws, { type: 'error', message: 'Server at capacity', code: 'CAPACITY' });
     ws.close();
     return;
   }
 
+  // Flag to prevent processing after timeout fires
+  let timedOut = false;
+
   // Set a timeout — client must send auth within PENDING_TIMEOUT_MS
   const timeout = setTimeout(() => {
+    timedOut = true;
     pendingConnections.delete(ws);
+    ws.removeListener('message', onFirstMessage);
+    ws.removeListener('close', onClose);
+    ws.removeListener('error', onError);
     sendMsg(ws, { type: 'error', message: 'Auth timeout', code: 'TIMEOUT' });
     ws.close();
   }, PENDING_TIMEOUT_MS);
 
   pendingConnections.set(ws, timeout);
 
+  /** Clean up pending state — used by close/error handlers */
+  const cleanupPending = () => {
+    const t = pendingConnections.get(ws);
+    if (t) {
+      clearTimeout(t);
+      pendingConnections.delete(ws);
+    }
+  };
+
   // Listen for the first message to extract mapId from auth
   const onFirstMessage = (data: Buffer | ArrayBuffer | Buffer[]) => {
     try {
+      // Guard: if timeout already fired, ignore this message
+      if (timedOut) return;
+
       const msg = JSON.parse(data.toString()) as ClientMessage;
 
       if (msg.type === 'auth') {
-        // Clear the pending timeout
-        const t = pendingConnections.get(ws);
-        if (t) clearTimeout(t);
-        pendingConnections.delete(ws);
-
-        // Remove this one-time listener
+        // Clear the pending timeout and clean up index-level listeners
+        cleanupPending();
         ws.removeListener('message', onFirstMessage);
+        ws.removeListener('close', onClose);
+        ws.removeListener('error', onError);
+
+        // Extra safety: check that the socket is still open
+        if (ws.readyState !== ws.OPEN) return;
 
         // Extract mapId (default to 0 for backward compatibility)
         const mapId = typeof msg.mapId === 'number' ? msg.mapId : 0;
@@ -233,23 +253,12 @@ wss.on('connection', (ws, req) => {
     }
   };
 
+  const onClose = () => { cleanupPending(); };
+  const onError = () => { cleanupPending(); };
+
   ws.on('message', onFirstMessage);
-
-  ws.on('close', () => {
-    const t = pendingConnections.get(ws);
-    if (t) {
-      clearTimeout(t);
-      pendingConnections.delete(ws);
-    }
-  });
-
-  ws.on('error', () => {
-    const t = pendingConnections.get(ws);
-    if (t) {
-      clearTimeout(t);
-      pendingConnections.delete(ws);
-    }
-  });
+  ws.on('close', onClose);
+  ws.on('error', onError);
 });
 
 wss.on('listening', async () => {
@@ -312,6 +321,7 @@ const cleanupTimer = setInterval(() => {
 async function shutdown() {
   console.log('\nShutting down...');
   clearInterval(cleanupTimer);
+  clearInterval(statsTimer);
 
   // Stop map selector
   if (mapSelector) {
@@ -347,7 +357,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 // Log periodic stats
-setInterval(() => {
+const statsTimer = setInterval(() => {
   const total = roomManager.getTotalPlayerCount();
   if (total > 0) {
     const counts = roomManager.getPlayerCounts();
