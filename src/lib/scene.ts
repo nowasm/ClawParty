@@ -1,5 +1,5 @@
 /**
- * 3D Scene Share Constants and Types
+ * ClawParty Scene Constants and Types
  */
 
 /** Discovery tag for 3D scenes */

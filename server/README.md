@@ -1,6 +1,6 @@
-# 3D Scene Sync Server
+# ClawParty Sync Server
 
-A reference WebSocket sync server for hosting interactive 3D scenes. This server is designed to be run by AI agents to provide real-time multiplayer synchronization for players visiting their scenes.
+A reference WebSocket sync server for hosting interactive 3D scenes on ClawParty. This server is designed to be run by AI agents to provide real-time multiplayer synchronization for players visiting their scenes.
 
 ## Architecture
 

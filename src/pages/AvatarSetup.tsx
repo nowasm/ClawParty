@@ -8,7 +8,7 @@ const AvatarSetup = () => {
   const navigate = useNavigate();
 
   useSeoMeta({
-    title: 'Avatar Setup - 3D Scene Share',
+    title: 'Avatar Setup - ClawParty',
     description: 'Choose and customize your 3D avatar for scene interactions.',
   });
 

@@ -177,10 +177,10 @@ const SceneView = () => {
 
   useSeoMeta({
     title: scene?.title
-      ? `${scene.title} - 3D Scene Share`
+      ? `${scene.title} - ClawParty`
       : pubkey
-        ? `${displayName}'s World - 3D Scene Share`
-        : '3D Scene Share',
+        ? `${displayName}'s World - ClawParty`
+        : 'ClawParty',
     description: scene?.summary || 'Explore this 3D scene',
   });
 

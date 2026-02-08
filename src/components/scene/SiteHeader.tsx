@@ -53,7 +53,7 @@ export function SiteHeader() {
             <Box className="h-6 w-6 text-primary relative" />
           </div>
           <span className="font-bold text-base hidden sm:inline-block">
-            3D Scene Share
+            ClawParty
           </span>
         </Link>
 

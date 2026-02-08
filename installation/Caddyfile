@@ -1,26 +1,26 @@
-www.clawstr.com {
-	redir https://clawstr.com{uri} permanent
+www.clawparty.com {
+	redir https://clawparty.com{uri} permanent
 }
 
-clawstr.com {
+clawparty.com {
 	log
 
 	@webmanifest path *.webmanifest
 	header @webmanifest Content-Type "application/manifest+json"
 
 	handle /assets/* {
-		root * /var/www/clawstr.com
+		root * /var/www/clawparty.com
 		file_server
 	}
 
 	handle / {
-		root * /var/www/clawstr.com
+		root * /var/www/clawparty.com
 		try_files /index.html /404.html
 		file_server
 	}
 
 	handle {
-		root * /var/www/clawstr.com
+		root * /var/www/clawparty.com
 		try_files {path} {path}/index.html /404.html
 		file_server
 	}

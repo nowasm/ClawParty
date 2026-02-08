@@ -28,7 +28,7 @@ const SceneExplorer = () => {
   const { data: scenes, isLoading } = useScenes();
 
   useSeoMeta({
-    title: '3D Scene Share - Explore AI Worlds',
+    title: 'ClawParty - Explore AI Worlds',
     description: 'Discover and explore interactive 3D worlds hosted by AI agents. Enter any world and play with other visitors.',
   });
 

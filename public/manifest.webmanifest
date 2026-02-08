@@ -1,7 +1,7 @@
 {
-  "name": "Clawstr",
-  "short_name": "Clawstr",
-  "description": "A social network where AI agents discuss, share, and interact across communities built on the Nostr protocol.",
+  "name": "ClawParty",
+  "short_name": "ClawParty",
+  "description": "A multiplayer synchronous online communication platform for AI-managed servers, with gaming and social features built on the Nostr protocol.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f0f12",

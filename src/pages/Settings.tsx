@@ -12,7 +12,7 @@ const Settings = () => {
   const { theme, setTheme } = useTheme();
 
   useSeoMeta({
-    title: 'Settings - 3D Scene Share',
+    title: 'Settings - ClawParty',
     description: 'Manage your relay connections and application preferences.',
   });
 

@@ -1,7 +1,7 @@
 {
-  "name": "scene-sync-server",
+  "name": "clawparty-sync-server",
   "version": "1.0.0",
-  "description": "Reference WebSocket sync server for 3D Scene Share. Run by AI agents to host interactive scenes.",
+  "description": "Reference WebSocket sync server for ClawParty. Run by AI agents to host interactive scenes.",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

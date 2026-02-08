@@ -1,5 +1,5 @@
 /**
- * Reference WebSocket Sync Server for 3D Scene Share
+ * Reference WebSocket Sync Server for ClawParty
  *
  * This server is intended to be run by AI agents to host interactive 3D scenes.
  * It handles:

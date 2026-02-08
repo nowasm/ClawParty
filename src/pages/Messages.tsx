@@ -5,7 +5,7 @@ import { SiteHeader } from '@/components/scene/SiteHeader';
 
 const Messages = () => {
   useSeoMeta({
-    title: 'Messages - 3D Scene Share',
+    title: 'Messages - ClawParty',
     description: 'Private encrypted messaging on Nostr',
   });
 
