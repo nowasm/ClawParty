@@ -34,18 +34,18 @@ export interface AvatarPreset {
 }
 
 export const AVATAR_PRESETS: AvatarPreset[] = [
-  { id: 'ac-blue', name: 'Cool', color: '#3B82F6', shape: 'villager', desc: 'A cool blue outfit' },
-  { id: 'ac-red', name: 'Sporty', color: '#EF4444', shape: 'villager', desc: 'An energetic red look' },
-  { id: 'ac-green', name: 'Forest', color: '#22C55E', shape: 'villager', desc: 'A nature-inspired outfit' },
-  { id: 'ac-purple', name: 'Mystic', color: '#A855F7', shape: 'villager', desc: 'A magical purple outfit' },
-  { id: 'ac-orange', name: 'Sunny', color: '#F97316', shape: 'villager', desc: 'A warm sunny look' },
-  { id: 'ac-pink', name: 'Sweet', color: '#EC4899', shape: 'villager', desc: 'A sweet pink style' },
-  { id: 'ac-cyan', name: 'Ocean', color: '#06B6D4', shape: 'villager', desc: 'A refreshing ocean vibe' },
-  { id: 'ac-gold', name: 'Royal', color: '#EAB308', shape: 'villager', desc: 'A royal golden look' },
-  { id: 'ac-gray', name: 'Urban', color: '#64748B', shape: 'villager', desc: 'A sleek urban style' },
-  { id: 'ac-indigo', name: 'Night', color: '#6366F1', shape: 'villager', desc: 'A night sky inspired' },
-  { id: 'ac-rose', name: 'Rose', color: '#F43F5E', shape: 'villager', desc: 'A beautiful rose tone' },
-  { id: 'ac-teal', name: 'Mint', color: '#14B8A6', shape: 'villager', desc: 'A refreshing mint look' },
+  { id: 'ac-blue', name: 'Deep Sea', color: '#3B82F6', shape: 'villager', desc: 'A deep ocean blue shell' },
+  { id: 'ac-red', name: 'Classic', color: '#EF4444', shape: 'villager', desc: 'A classic red lobster' },
+  { id: 'ac-green', name: 'Reef', color: '#22C55E', shape: 'villager', desc: 'A reef-dwelling green shell' },
+  { id: 'ac-purple', name: 'Rare', color: '#A855F7', shape: 'villager', desc: 'A rare purple mutation' },
+  { id: 'ac-orange', name: 'Sunset', color: '#F97316', shape: 'villager', desc: 'A sunset orange shell' },
+  { id: 'ac-pink', name: 'Cotton Candy', color: '#EC4899', shape: 'villager', desc: 'A cotton candy pink shell' },
+  { id: 'ac-cyan', name: 'Tropical', color: '#06B6D4', shape: 'villager', desc: 'A tropical lagoon shell' },
+  { id: 'ac-gold', name: 'Golden', color: '#EAB308', shape: 'villager', desc: 'A legendary golden shell' },
+  { id: 'ac-gray', name: 'Stealth', color: '#64748B', shape: 'villager', desc: 'A stealthy gray shell' },
+  { id: 'ac-indigo', name: 'Abyss', color: '#6366F1', shape: 'villager', desc: 'An abyssal indigo shell' },
+  { id: 'ac-rose', name: 'Coral', color: '#F43F5E', shape: 'villager', desc: 'A vibrant coral shell' },
+  { id: 'ac-teal', name: 'Tide', color: '#14B8A6', shape: 'villager', desc: 'A tide pool teal shell' },
 ];
 
 // ============================================================================

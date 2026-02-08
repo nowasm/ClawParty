@@ -1,7 +1,7 @@
 import { useState, useEffect, Suspense, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
-import { Loader2, Save, RotateCcw, Palette, User, Sparkles, Scissors } from 'lucide-react';
+import { Loader2, Save, RotateCcw, Palette, User, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,8 +9,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { AvatarModel } from './AvatarModel';
 import {
   AVATAR_PRESETS,
-  HAIR_STYLES,
-  HAIR_COLORS,
   getAvatarPreset,
   type AvatarConfig,
   type AvatarPreset,
@@ -37,13 +35,9 @@ const COLOR_PALETTE = [
 function TurntablePreview({
   preset,
   color,
-  hairStyle,
-  hairColor,
 }: {
   preset: AvatarPreset;
   color: string;
-  hairStyle: string;
-  hairColor: string;
 }) {
   return (
     <>
@@ -55,8 +49,6 @@ function TurntablePreview({
         <AvatarModel
           preset={preset}
           color={color}
-          hairStyle={hairStyle}
-          hairColor={hairColor}
           animate
         />
 
@@ -105,8 +97,6 @@ export function AvatarSelector() {
 
   const [selectedModel, setSelectedModel] = useState(AVATAR_PRESETS[0].id);
   const [customColor, setCustomColor] = useState(AVATAR_PRESETS[0].color);
-  const [selectedHairStyle, setSelectedHairStyle] = useState('short');
-  const [selectedHairColor, setSelectedHairColor] = useState('#3d2914');
   const [displayName, setDisplayName] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -115,8 +105,6 @@ export function AvatarSelector() {
     if (currentAvatar) {
       setSelectedModel(currentAvatar.model);
       setCustomColor(currentAvatar.color);
-      setSelectedHairStyle(currentAvatar.hairStyle || 'short');
-      setSelectedHairColor(currentAvatar.hairColor || '#3d2914');
       setDisplayName(currentAvatar.displayName);
     }
   }, [currentAvatar]);
@@ -134,28 +122,14 @@ export function AvatarSelector() {
     setHasChanges(true);
   }, []);
 
-  const handleHairStyleSelect = useCallback((id: string) => {
-    setSelectedHairStyle(id);
-    setHasChanges(true);
-  }, []);
-
-  const handleHairColorSelect = useCallback((c: string) => {
-    setSelectedHairColor(c);
-    setHasChanges(true);
-  }, []);
-
   const handleReset = useCallback(() => {
     if (currentAvatar) {
       setSelectedModel(currentAvatar.model);
       setCustomColor(currentAvatar.color);
-      setSelectedHairStyle(currentAvatar.hairStyle || 'short');
-      setSelectedHairColor(currentAvatar.hairColor || '#3d2914');
       setDisplayName(currentAvatar.displayName);
     } else {
       setSelectedModel(AVATAR_PRESETS[0].id);
       setCustomColor(AVATAR_PRESETS[0].color);
-      setSelectedHairStyle('short');
-      setSelectedHairColor('#3d2914');
       setDisplayName('');
     }
     setHasChanges(false);
@@ -167,8 +141,8 @@ export function AvatarSelector() {
     const config: AvatarConfig = {
       model: selectedModel,
       color: customColor,
-      hairStyle: selectedHairStyle,
-      hairColor: selectedHairColor,
+      hairStyle: 'none',
+      hairColor: '#3d2914',
       displayName: displayName.trim(),
     };
 
@@ -237,8 +211,6 @@ export function AvatarSelector() {
               <TurntablePreview
                 preset={selectedPreset}
                 color={customColor}
-                hairStyle={selectedHairStyle}
-                hairColor={selectedHairColor}
               />
             </Canvas>
           </Suspense>
@@ -269,11 +241,11 @@ export function AvatarSelector() {
             />
           </div>
 
-          {/* Outfit Preset */}
+          {/* Shell Preset */}
           <div className="space-y-2">
             <Label className="text-sm font-semibold flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5" />
-              Outfit Style
+              Shell Style
             </Label>
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
               {AVATAR_PRESETS.map((preset) => (
@@ -303,11 +275,11 @@ export function AvatarSelector() {
             </div>
           </div>
 
-          {/* Outfit Color */}
+          {/* Shell Color */}
           <div className="space-y-2">
             <Label className="text-sm font-semibold flex items-center gap-1.5">
               <Palette className="h-3.5 w-3.5" />
-              Outfit Color
+              Shell Color
             </Label>
             <div className="grid grid-cols-6 sm:grid-cols-9 gap-1.5">
               {COLOR_PALETTE.map((c) => (
@@ -335,67 +307,6 @@ export function AvatarSelector() {
                 value={customColor}
                 onChange={(e) => handleColorSelect(e.target.value)}
                 placeholder="#3B82F6"
-                className="flex-1 font-mono text-sm h-8"
-              />
-            </div>
-          </div>
-
-          {/* Hair Style */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold flex items-center gap-1.5">
-              <Scissors className="h-3.5 w-3.5" />
-              Hair Style
-            </Label>
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-              {HAIR_STYLES.map((style) => (
-                <button
-                  key={style.id}
-                  onClick={() => handleHairStyleSelect(style.id)}
-                  className={`rounded-xl border-2 p-2 text-center transition-all duration-200 ${
-                    selectedHairStyle === style.id
-                      ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10 scale-[1.02]'
-                      : 'border-border hover:border-primary/40 hover:bg-muted/50 hover:shadow-md'
-                  }`}
-                >
-                  <span className="text-lg">{style.icon}</span>
-                  <div className="text-[10px] font-medium mt-0.5">{style.name}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Hair Color */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold flex items-center gap-1.5">
-              <Palette className="h-3.5 w-3.5" />
-              Hair Color
-            </Label>
-            <div className="grid grid-cols-7 gap-1.5">
-              {HAIR_COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => handleHairColorSelect(c)}
-                  className={`aspect-square rounded-lg transition-all duration-150 ring-offset-background ${
-                    selectedHairColor.toLowerCase() === c.toLowerCase()
-                      ? 'ring-2 ring-primary ring-offset-2 scale-110 shadow-lg'
-                      : 'hover:scale-110 hover:shadow-md hover:ring-1 hover:ring-white/30'
-                  }`}
-                  style={{ backgroundColor: c }}
-                  title={c}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={selectedHairColor}
-                onChange={(e) => handleHairColorSelect(e.target.value)}
-                className="h-8 w-10 rounded-lg border border-border cursor-pointer bg-transparent"
-              />
-              <Input
-                value={selectedHairColor}
-                onChange={(e) => handleHairColorSelect(e.target.value)}
-                placeholder="#3d2914"
                 className="flex-1 font-mono text-sm h-8"
               />
             </div>
