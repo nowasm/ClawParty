@@ -82,6 +82,7 @@ const SceneView = () => {
     broadcastEmoji,
     broadcastChat,
     sendPrivateChat,
+    sendJoin,
     liveChatMessages,
     privateChatMessages,
     isActive: syncActive,
@@ -91,6 +92,13 @@ const SceneView = () => {
     syncUrls: effectiveSyncUrls,
     enabled: !!user && !!pubkey,
   });
+
+  // Send our avatar config to the server when connected
+  useEffect(() => {
+    if (syncActive && currentUserAvatar) {
+      sendJoin(currentUserAvatar);
+    }
+  }, [syncActive, currentUserAvatar, sendJoin]);
 
   const { data: sceneChatMessages = [] } = useSceneChat(pubkey, sceneDTag);
   const mergedPublicMessages = useMemo(() => {
@@ -154,18 +162,23 @@ const SceneView = () => {
   }, [remotePubkeys, remoteAvatarConfigs]);
 
   // Build full remote avatars map (with fallbacks)
+  // Priority: 1) Nostr-fetched avatar, 2) WebSocket-provided avatar, 3) deterministic preset
   const remoteAvatars = useMemo(() => {
     const map: Record<string, AvatarConfig> = {};
     for (const pk of remotePubkeys) {
       if (pk === user?.pubkey) continue;
-      map[pk] = remoteAvatarConfigs[pk] ?? {
+      const nostrAvatar = remoteAvatarConfigs[pk];
+      const wsAvatar = peerStates[pk]?.avatar;
+      map[pk] = nostrAvatar ?? wsAvatar ?? {
         model: AVATAR_PRESETS[Math.abs(pk.charCodeAt(0)) % AVATAR_PRESETS.length].id,
         color: AVATAR_PRESETS[Math.abs(pk.charCodeAt(0)) % AVATAR_PRESETS.length].color,
+        hairStyle: 'short',
+        hairColor: '#3d2914',
         displayName: pk.slice(0, 8),
       };
     }
     return map;
-  }, [remotePubkeys, remoteAvatarConfigs, user?.pubkey]);
+  }, [remotePubkeys, remoteAvatarConfigs, peerStates, user?.pubkey]);
 
   const handleEmoji = useCallback((emoji: string) => {
     broadcastEmoji(emoji);

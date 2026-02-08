@@ -10,6 +10,7 @@ import type {
   PeerPosition,
   ServerMessage,
 } from '@/lib/wsSync';
+import type { AvatarConfig } from '@/lib/scene';
 import { cellFromPosition, getSubscriptionCells } from '@/lib/spatialGrid';
 
 /** Position state flush interval in ms (~15 fps) */
@@ -60,6 +61,8 @@ interface UseSceneSyncReturn {
   broadcastChat: (text: string) => void;
   /** Send a private chat message to one peer */
   sendPrivateChat: (peerPubkey: string, text: string) => void;
+  /** Announce our avatar config to the server */
+  sendJoin: (avatar: AvatarConfig) => void;
   /** Recent chat messages received via WebSocket */
   liveChatMessages: LiveChatMessage[];
   /** Private chat messages per peer pubkey */
@@ -311,6 +314,10 @@ export function useSceneSync({ syncUrls, syncUrl, enabled = true, mapId }: UseSc
     }
   }, []);
 
+  const sendJoin = useCallback((avatar: AvatarConfig) => {
+    managerRef.current?.send({ type: 'join', avatar });
+  }, []);
+
   const broadcastEmoji = useCallback((emoji: string) => {
     managerRef.current?.send({ type: 'emoji', emoji });
   }, []);
@@ -356,6 +363,7 @@ export function useSceneSync({ syncUrls, syncUrl, enabled = true, mapId }: UseSc
     broadcastEmoji,
     broadcastChat,
     sendPrivateChat,
+    sendJoin,
     liveChatMessages,
     privateChatMessages,
     isActive: connectionState === 'connected',
