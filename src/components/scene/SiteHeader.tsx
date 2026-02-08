@@ -69,18 +69,6 @@ export function SiteHeader() {
               <span className="hidden md:inline">Explore</span>
             </Button>
           </Link>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              'gap-2 text-sm',
-              messagesOpen && 'bg-primary/10 text-primary'
-            )}
-            onClick={() => setMessagesOpen(true)}
-          >
-            <MessageCircle className="h-4 w-4" />
-            <span className="hidden md:inline">Messages</span>
-          </Button>
         </nav>
 
         {/* Right side */}
@@ -131,6 +119,13 @@ export function SiteHeader() {
                 >
                   <UserCircle className="h-4 w-4" />
                   <span>Avatar</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setMessagesOpen(true)}
+                  className="flex items-center gap-2 cursor-pointer p-2 rounded-md"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Messages</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => navigate('/settings')}
