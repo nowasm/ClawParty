@@ -3,6 +3,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import {
   MultiSyncManager,
   type MultiSyncState,
+  type ServerConnectionSnapshot,
 } from '@/lib/multiSyncManager';
 import type {
   PeerState,
@@ -65,6 +66,8 @@ interface UseSceneSyncReturn {
   isActive: boolean;
   /** Detailed connection state */
   connectionState: ConnectionState;
+  /** Per-server connection snapshots for debug UI */
+  serverConnections: ServerConnectionSnapshot[];
 }
 
 export function useSceneSync({ syncUrls, syncUrl, enabled = true }: UseSceneSyncOptions): UseSceneSyncReturn {
@@ -88,6 +91,7 @@ export function useSceneSync({ syncUrls, syncUrl, enabled = true }: UseSceneSync
   const [peerStates, setPeerStates] = useState<Record<string, PeerState>>({});
   const [connectedCount, setConnectedCount] = useState(0);
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
+  const [serverConnections, setServerConnections] = useState<ServerConnectionSnapshot[]>([]);
   const [liveChatMessages, setLiveChatMessages] = useState<LiveChatMessage[]>([]);
   const [privateChatMessages, setPrivateChatMessages] = useState<Record<string, LiveChatMessage[]>>({});
   const peerStatesRef = useRef<Record<string, PeerState>>({});
@@ -106,6 +110,8 @@ export function useSceneSync({ syncUrls, syncUrl, enabled = true }: UseSceneSync
     manager.onStateChange = (state: MultiSyncState) => {
       // Map MultiSyncState to ConnectionState (they happen to match)
       setConnectionState(state);
+      // Update server connection snapshots on every state change
+      setServerConnections(manager.getConnectionsSnapshot());
     };
 
     manager.onMessage = (msg: ServerMessage) => {
@@ -231,6 +237,9 @@ export function useSceneSync({ syncUrls, syncUrl, enabled = true }: UseSceneSync
     const flushInterval = setInterval(() => {
       setPeerStates({ ...peerStatesRef.current });
 
+      // Refresh server connection snapshots (picks up RTT changes)
+      setServerConnections(manager.getConnectionsSnapshot());
+
       // Clean up expired emojis
       const now = Date.now();
       let changed = false;
@@ -268,6 +277,7 @@ export function useSceneSync({ syncUrls, syncUrl, enabled = true }: UseSceneSync
       setPeerStates({});
       setConnectedCount(0);
       setConnectionState('disconnected');
+      setServerConnections([]);
       setLiveChatMessages([]);
       setPrivateChatMessages({});
     };
@@ -347,5 +357,6 @@ export function useSceneSync({ syncUrls, syncUrl, enabled = true }: UseSceneSync
     privateChatMessages,
     isActive: connectionState === 'connected',
     connectionState,
+    serverConnections,
   };
 }

@@ -25,7 +25,7 @@ import { Room } from './room.js';
 // Configuration
 // ============================================================================
 
-const PORT = parseInt(process.env.PORT ?? '8080', 10);
+const PORT = parseInt(process.env.PORT ?? '18080', 10);
 const HOST = process.env.HOST ?? '0.0.0.0';
 const SCENE_PUBKEY = process.env.SCENE_PUBKEY ?? '';
 const SCENE_DTAG = process.env.SCENE_DTAG ?? 'my-world';

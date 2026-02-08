@@ -106,6 +106,14 @@ interface ServerConnection {
 
 export type MultiSyncState = 'disconnected' | 'connecting' | 'connected';
 
+/** Snapshot of a single server connection for debug/status UI */
+export interface ServerConnectionSnapshot {
+  url: string;
+  state: ConnectionState;
+  rtt: number;
+  isPrimary: boolean;
+}
+
 export interface MultiSyncManagerOptions {
   /** Our Nostr pubkey (hex) */
   pubkey: string;
@@ -200,6 +208,20 @@ export class MultiSyncManager {
   updateUrls(urls: string[]): void {
     if (!this.opts) return;
     this.connect(urls, this.opts.pubkey, this.opts.sign);
+  }
+
+  /** Get a snapshot of all server connections for debug UI */
+  getConnectionsSnapshot(): ServerConnectionSnapshot[] {
+    const result: ServerConnectionSnapshot[] = [];
+    for (const [url, conn] of this.connections) {
+      result.push({
+        url,
+        state: conn.state,
+        rtt: conn.rtt,
+        isPrimary: url === this.primaryUrl,
+      });
+    }
+    return result;
   }
 
   /** Disconnect from all servers and clean up */

@@ -11,6 +11,7 @@ import { SceneViewer } from '@/components/scene/SceneViewer';
 import { SceneChat } from '@/components/scene/SceneChat';
 import { EmojiBar } from '@/components/scene/EmojiBar';
 import { SiteHeader } from '@/components/scene/SiteHeader';
+import { SyncDebugPanel } from '@/components/scene/SyncDebugPanel';
 import { useScene } from '@/hooks/useScene';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useAvatars } from '@/hooks/useAvatar';
@@ -73,6 +74,7 @@ const SceneView = () => {
     privateChatMessages,
     isActive: syncActive,
     connectionState,
+    serverConnections,
   } = useSceneSync({
     syncUrls: scene?.syncUrls,
     enabled: !!user && !!pubkey,
@@ -266,6 +268,18 @@ const SceneView = () => {
             <div className="bg-card/90 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 shadow-lg">
               <EmojiBar onEmoji={handleEmoji} />
             </div>
+          </div>
+        )}
+
+        {/* Sync debug panel (bottom-right) */}
+        {user && (
+          <div className="absolute bottom-4 right-3 z-10">
+            <SyncDebugPanel
+              connectionState={connectionState}
+              serverConnections={serverConnections}
+              connectedPeers={connectedCount}
+              syncUrls={scene?.syncUrls ?? []}
+            />
           </div>
         )}
 
