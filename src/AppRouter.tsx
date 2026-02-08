@@ -7,7 +7,7 @@ import SceneExplorer from "./pages/SceneExplorer";
 import SceneView from "./pages/SceneView";
 import AvatarSetup from "./pages/AvatarSetup";
 import JoinGuide from "./pages/JoinGuide";
-import Messages from "./pages/Messages";
+
 import Settings from "./pages/Settings";
 import { NIP19Page } from "./pages/NIP19Page";
 import NotFound from "./pages/NotFound";
@@ -27,7 +27,7 @@ export function AppRouter() {
         <Route path="/scene/:npub" element={<SceneView />} />
         <Route path="/avatar" element={<AvatarSetup />} />
         <Route path="/join" element={<JoinGuide />} />
-        <Route path="/messages" element={<Messages />} />
+
         <Route path="/settings" element={<Settings />} />
         {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}
         <Route path="/:nip19" element={<NIP19Page />} />

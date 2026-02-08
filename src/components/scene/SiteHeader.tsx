@@ -16,11 +16,7 @@ import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import LoginDialog from '@/components/auth/LoginDialog';
 import SignupDialog from '@/components/auth/SignupDialog';
-
-const NAV_ITEMS = [
-  { href: '/', label: 'Explore', icon: Compass },
-  { href: '/messages', label: 'Messages', icon: MessageCircle },
-];
+import { MessagesSheet } from '@/components/MessagesSheet';
 
 export function SiteHeader() {
   const location = useLocation();
@@ -29,6 +25,7 @@ export function SiteHeader() {
   const { currentUser, otherUsers, setLogin, removeLogin } = useLoggedInAccounts();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [signupDialogOpen, setSignupDialogOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
@@ -59,25 +56,31 @@ export function SiteHeader() {
 
         {/* Navigation */}
         <nav className="flex items-center gap-1">
-          {NAV_ITEMS.map((item) => {
-            const isActive = location.pathname === item.href;
-            const Icon = item.icon;
-            return (
-              <Link key={item.href} to={item.href}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    'gap-2 text-sm',
-                    isActive && 'bg-primary/10 text-primary'
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden md:inline">{item.label}</span>
-                </Button>
-              </Link>
-            );
-          })}
+          <Link to="/">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                'gap-2 text-sm',
+                location.pathname === '/' && 'bg-primary/10 text-primary'
+              )}
+            >
+              <Compass className="h-4 w-4" />
+              <span className="hidden md:inline">Explore</span>
+            </Button>
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              'gap-2 text-sm',
+              messagesOpen && 'bg-primary/10 text-primary'
+            )}
+            onClick={() => setMessagesOpen(true)}
+          >
+            <MessageCircle className="h-4 w-4" />
+            <span className="hidden md:inline">Messages</span>
+          </Button>
         </nav>
 
         {/* Right side */}
@@ -204,6 +207,7 @@ export function SiteHeader() {
         isOpen={signupDialogOpen}
         onClose={() => setSignupDialogOpen(false)}
       />
+      <MessagesSheet open={messagesOpen} onOpenChange={setMessagesOpen} />
     </header>
   );
 }

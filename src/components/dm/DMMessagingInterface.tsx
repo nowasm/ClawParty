@@ -15,17 +15,20 @@ import {
 
 interface DMMessagingInterfaceProps {
   className?: string;
+  /** When true, forces single-panel layout (like mobile) for narrow containers such as Sheet overlays. */
+  compact?: boolean;
 }
 
-export const DMMessagingInterface = ({ className }: DMMessagingInterfaceProps) => {
+export const DMMessagingInterface = ({ className, compact }: DMMessagingInterfaceProps) => {
   const [selectedPubkey, setSelectedPubkey] = useState<string | null>(null);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const isMobile = useIsMobile();
   const { clearCacheAndRefetch } = useDMContext();
 
-  // On mobile, show only one panel at a time
-  const showConversationList = !isMobile || !selectedPubkey;
-  const showChatArea = !isMobile || selectedPubkey;
+  // In compact mode (Sheet) or mobile, show only one panel at a time
+  const singlePanel = isMobile || compact;
+  const showConversationList = !singlePanel || !selectedPubkey;
+  const showChatArea = !singlePanel || selectedPubkey;
 
   const handleSelectConversation = useCallback((pubkey: string) => {
     setSelectedPubkey(pubkey);
@@ -53,9 +56,9 @@ export const DMMessagingInterface = ({ className }: DMMessagingInterfaceProps) =
       <div className={cn("flex gap-4 overflow-hidden", className)}>
         {/* Conversation List - Left Sidebar */}
         <div className={cn(
-          "md:w-80 md:flex-shrink-0",
-          isMobile && !showConversationList && "hidden",
-          isMobile && showConversationList && "w-full"
+          !singlePanel && "md:w-80 md:flex-shrink-0",
+          singlePanel && !showConversationList && "hidden",
+          singlePanel && showConversationList && "w-full"
         )}>
           <DMConversationList
             selectedPubkey={selectedPubkey}
@@ -67,13 +70,13 @@ export const DMMessagingInterface = ({ className }: DMMessagingInterfaceProps) =
 
         {/* Chat Area - Right Panel */}
         <div className={cn(
-          "flex-1 md:min-w-0",
-          isMobile && !showChatArea && "hidden",
-          isMobile && showChatArea && "w-full"
+          !singlePanel && "flex-1 md:min-w-0",
+          singlePanel && !showChatArea && "hidden",
+          singlePanel && showChatArea && "w-full"
         )}>
           <DMChatArea
             pubkey={selectedPubkey}
-            onBack={isMobile ? handleBack : undefined}
+            onBack={singlePanel ? handleBack : undefined}
             className="h-full"
           />
         </div>
