@@ -41,23 +41,17 @@ export interface AnnouncerConfig {
   maxPlayers: number;
   /** Room manager to query for map/player info */
   roomManager: RoomManager;
-  /**
-   * Scene d-tag for scene-based discovery.
-   * When set, heartbeats include an `a` tag with the scene address
-   * (30311:<pubkey>:<dTag>) so clients using useSyncRelays can discover
-   * this sync server by scene address.
-   */
-  sceneDTag?: string;
 }
 
 /**
  * Build a kind 20311 ephemeral heartbeat event.
  *
- * Tags serve two discovery paths:
- *   1. Map-based: `#map` tags → used by useMapSyncServers (MapView)
- *   2. Scene-based: `#a` tag → used by useSyncRelays (SceneView)
- *
- * Both paths query `#t: ["3d-scene-sync"]` as the discovery filter.
+ * Tags for discovery:
+ *   - `#t: ["3d-scene-sync"]` — discovery filter
+ *   - `#map: [mapId]` — one per guarded map, with player count
+ *   - `rooms` — number of active rooms (maps being guarded)
+ *   - `sync` — WebSocket URL
+ *   - `load` / `capacity` — player load info
  */
 function buildHeartbeatEvent(
   config: AnnouncerConfig,
@@ -67,8 +61,9 @@ function buildHeartbeatEvent(
   const servedMaps = config.roomManager.getServedMapIds();
   const playerCounts = config.roomManager.getPlayerCounts();
   const totalPlayers = config.roomManager.getTotalPlayerCount();
+  const activeRoomCount = config.roomManager.getActiveMapIds().length;
 
-  // Map status to the format useSyncRelays expects: 'active' | 'standby'
+  // Map status to the format clients expect: 'active' | 'standby'
   const syncRelayStatus = status === 'online' ? 'active' : 'standby';
 
   const tags: string[][] = [
@@ -77,6 +72,7 @@ function buildHeartbeatEvent(
     ['status', syncRelayStatus],
     ['load', totalPlayers.toString()],
     ['capacity', config.maxPlayers.toString()],
+    ['rooms', activeRoomCount.toString()],
     ['uptime', uptimeSeconds.toString()],
   ];
 
@@ -84,24 +80,15 @@ function buildHeartbeatEvent(
     tags.push(['region', config.region]);
   }
 
-  // Add scene address tag for scene-based discovery (useSyncRelays)
-  if (config.sceneDTag) {
-    const pubkey = getPublicKey(config.secretKey);
-    tags.push(['a', `30311:${pubkey}:${config.sceneDTag}`]);
-    tags.push(['slot', `1/${Math.max(1, totalPlayers > 0 ? 1 : 1)}`]);
-  }
-
   // Add map tags for map-based discovery (useMapSyncServers)
   if (servedMaps === 'all') {
-    // For "all" mode, just advertise maps that have active rooms
-    // (advertising all 10,000 would be too much)
-    // Also add a special tag to indicate this node serves all maps
+    // For "all" mode, advertise maps with active rooms + serves-all flag
     tags.push(['serves', 'all']);
     for (const [mapId, count] of playerCounts) {
       tags.push(['map', mapId.toString(), count.toString()]);
     }
   } else {
-    // Advertise all configured maps, with player counts for active ones
+    // Advertise all guarded maps with player counts
     for (const mapId of servedMaps) {
       const count = playerCounts.get(mapId) ?? 0;
       tags.push(['map', mapId.toString(), count.toString()]);
@@ -194,13 +181,11 @@ export class Announcer {
     const npub = nip19.npubEncode(pubkey);
 
     console.log('');
-    console.log('[Announcer] Starting heartbeat publisher');
-    console.log(`[Announcer]   Pubkey: ${npub}`);
-    console.log(`[Announcer]   Sync:   ${this.config.syncUrl}`);
-    console.log(`[Announcer]   Region: ${this.config.region || '(not set)'}`);
-    if (this.config.sceneDTag) {
-      console.log(`[Announcer]   Scene:  30311:${pubkey}:${this.config.sceneDTag}`);
-    }
+    console.log('[Guardian] Starting heartbeat publisher');
+    console.log(`[Guardian]   Pubkey: ${npub}`);
+    console.log(`[Guardian]   Sync:   ${this.config.syncUrl}`);
+    console.log(`[Guardian]   Region: ${this.config.region || '(not set)'}`);
+    void pubkey;
 
     // Publish first heartbeat immediately
     await this.publishHeartbeat('online');
@@ -224,12 +209,12 @@ export class Announcer {
       const activeRooms = this.config.roomManager.getActiveMapIds().length;
 
       console.log(
-        `[Announcer] Heartbeat ${status}: ${accepted}/${DEFAULT_RELAYS.length} relays, ` +
+        `[Guardian] Heartbeat ${status}: ${accepted}/${DEFAULT_RELAYS.length} relays, ` +
         `${totalPlayers} players, ${activeRooms} active rooms, ` +
         `uptime ${this.getUptimeSeconds()}s`,
       );
     } catch (err) {
-      console.error(`[Announcer] Failed to publish heartbeat: ${(err as Error).message}`);
+      console.error(`[Guardian] Failed to publish heartbeat: ${(err as Error).message}`);
     }
   }
 
@@ -246,7 +231,7 @@ export class Announcer {
     try {
       await this.publishHeartbeat('offline');
     } catch (err) {
-      console.error(`[Announcer] Failed to publish offline heartbeat: ${(err as Error).message}`);
+      console.error(`[Guardian] Failed to publish offline heartbeat: ${(err as Error).message}`);
     }
   }
 }

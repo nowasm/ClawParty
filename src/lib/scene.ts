@@ -221,6 +221,8 @@ export interface ScenePreset {
   icon: string;
   /** CSS gradient for the card background */
   gradient: string;
+  /** Seed map ID on the 100x100 grid */
+  mapId: number;
 }
 
 export const SCENE_PRESETS: ScenePreset[] = [
@@ -231,6 +233,7 @@ export const SCENE_PRESETS: ScenePreset[] = [
     sceneUrl: '',
     icon: '🌿',
     gradient: 'from-green-500/20 to-emerald-600/10',
+    mapId: 3520,  // toMapId(20, 35)
   },
   {
     id: 'desert-dunes',
@@ -239,6 +242,7 @@ export const SCENE_PRESETS: ScenePreset[] = [
     sceneUrl: '__preset__desert',
     icon: '🏜️',
     gradient: 'from-amber-500/20 to-orange-600/10',
+    mapId: 3580,  // toMapId(80, 35)
   },
   {
     id: 'snow-field',
@@ -247,6 +251,7 @@ export const SCENE_PRESETS: ScenePreset[] = [
     sceneUrl: '__preset__snow',
     icon: '❄️',
     gradient: 'from-blue-300/20 to-cyan-400/10',
+    mapId: 5050,  // toMapId(50, 50)
   },
   {
     id: 'lava-rocks',
@@ -255,6 +260,7 @@ export const SCENE_PRESETS: ScenePreset[] = [
     sceneUrl: '__preset__lava',
     icon: '🌋',
     gradient: 'from-red-600/20 to-orange-700/10',
+    mapId: 6580,  // toMapId(80, 65)
   },
   {
     id: 'ocean-platform',
@@ -263,6 +269,7 @@ export const SCENE_PRESETS: ScenePreset[] = [
     sceneUrl: '__preset__ocean',
     icon: '🌊',
     gradient: 'from-blue-500/20 to-indigo-600/10',
+    mapId: 6520,  // toMapId(20, 65)
   },
   {
     id: 'night-city',
@@ -271,8 +278,14 @@ export const SCENE_PRESETS: ScenePreset[] = [
     sceneUrl: '__preset__night',
     icon: '🌃',
     gradient: 'from-purple-600/20 to-indigo-800/10',
+    mapId: 1550,  // toMapId(50, 15)
   },
 ];
+
+/** Get the scene preset for a seed map ID, if any */
+export function getSeedPreset(mapId: number): ScenePreset | undefined {
+  return SCENE_PRESETS.find((p) => p.mapId === mapId);
+}
 
 /** Check if a scene URL is a built-in preset */
 export function isPresetScene(url: string): boolean {

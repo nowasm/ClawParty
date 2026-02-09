@@ -127,6 +127,11 @@ export class RoomManager {
     return this.config.servedMaps;
   }
 
+  /** Update the served maps list (used by MapSelector in auto mode) */
+  updateServedMaps(mapIds: number[]): void {
+    this.config.servedMaps = mapIds;
+  }
+
   /** Clean up idle connections across all rooms */
   cleanupInactive(maxIdleMs: number): void {
     for (const managed of this.rooms.values()) {

@@ -19,10 +19,8 @@ export function AppRouter() {
     <BrowserRouter future={routerFuture}>
       <ScrollToTop />
       <Routes>
-        <Route path="/" element={<JoinGuide />} />
-        {/* World map hidden for now — uncomment when ready
+        <Route path="/" element={<WorldMap />} />
         <Route path="/world" element={<WorldMap />} />
-        */}
         <Route path="/map/:mapId" element={<MapView />} />
         {/* Legacy scene routes (backward compatibility) */}
         <Route path="/scenes" element={<SceneExplorer />} />

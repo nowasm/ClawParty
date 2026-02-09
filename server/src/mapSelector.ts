@@ -1,23 +1,21 @@
 /**
- * Map Selector — automatically selects which maps a sync node should serve.
+ * Map Selector — Guardian birth + adjacent frontier expansion.
  *
- * The algorithm prioritizes:
- *   1. Maps with zero sync nodes (prevent orphaned maps)
- *   2. Maps with fewest sync nodes (balance load)
- *   3. Maps with most players (serve where demand is highest)
+ * Each lobster guardian:
+ *   1. Picks a seed point as its "birthplace" (the seed with fewest guardians)
+ *   2. Expands outward from the guarded territory (8-directional adjacency)
+ *   3. Only selects maps on the frontier (adjacent to already-guarded maps)
  *
- * The selector periodically re-evaluates and can adjust the served map list.
- * This is used when the server is started without a specific SERVED_MAPS config.
- *
- * Usage:
- *   const selector = new MapSelector(roomManager, { targetMaps: 50 });
- *   await selector.start();
- *   // selector updates roomManager's served maps periodically
- *   selector.stop();
+ * This creates a naturally growing "green zone" of guarded tiles that
+ * expands from the 6 seed points as more lobsters join the network.
  */
 
 import WebSocket from 'ws';
-import { TOTAL_MAPS } from './mapRegistry.js';
+import {
+  SEED_MAP_IDS,
+  getNeighborMapIds,
+  isValidMapId,
+} from './mapRegistry.js';
 import type { RoomManager } from './roomManager.js';
 
 // Default relays for querying heartbeat data
@@ -30,22 +28,23 @@ const DEFAULT_RELAYS = [
 const REEVALUATE_INTERVAL_MS = 30 * 60_000; // 30 minutes
 
 export interface MapSelectorConfig {
-  /** How many maps this node should aim to serve */
+  /** How many frontier maps (beyond the birth seed) to guard */
   targetMaps: number;
   /** Relay URLs to query for heartbeat data */
   relays?: string[];
 }
 
-interface MapScore {
-  mapId: number;
-  syncNodes: number;
-  players: number;
-  score: number;
+interface MapNetworkState {
+  /** Set of all currently guarded map IDs across the network */
+  guardedMaps: Set<number>;
+  /** Map ID → number of sync nodes guarding it */
+  guardianCounts: Map<number, number>;
+  /** Map ID → number of players on it */
+  playerCounts: Map<number, number>;
 }
 
 /**
  * Query a Nostr relay for recent heartbeat events.
- * Returns parsed events as raw JSON arrays.
  */
 function queryRelay(relayUrl: string): Promise<unknown[]> {
   return new Promise((resolve) => {
@@ -65,8 +64,7 @@ function queryRelay(relayUrl: string): Promise<unknown[]> {
     }
 
     ws.on('open', () => {
-      // Subscribe to heartbeat events
-      const subId = 'map-selector';
+      const subId = 'guardian-selector';
       ws.send(JSON.stringify([
         'REQ', subId,
         {
@@ -100,22 +98,135 @@ function queryRelay(relayUrl: string): Promise<unknown[]> {
 }
 
 /**
- * Analyze heartbeat data to score maps for selection.
+ * Analyze heartbeat data to build a picture of the network state.
  */
-function scoreMap(
-  mapId: number,
-  syncNodeCount: number,
-  playerCount: number,
-): number {
-  // Higher score = more desirable to serve
-  // Priority 1: Maps with zero sync nodes get a huge bonus
-  const orphanBonus = syncNodeCount === 0 ? 1000 : 0;
-  // Priority 2: Fewer existing sync nodes = higher score
-  const scarcityScore = Math.max(0, 100 - syncNodeCount * 25);
-  // Priority 3: More players = higher demand score
-  const demandScore = Math.min(playerCount * 10, 100);
+function analyzeHeartbeats(allEvents: unknown[]): MapNetworkState {
+  const now = Math.floor(Date.now() / 1000);
 
-  return orphanBonus + scarcityScore + demandScore;
+  // Deduplicate by sync URL (keep latest per server)
+  const latestBySyncUrl = new Map<string, Record<string, unknown>>();
+  for (const raw of allEvents) {
+    const event = raw as Record<string, unknown>;
+    const tags = event.tags as string[][] | undefined;
+    if (!tags) continue;
+
+    const syncTag = tags.find(([name]) => name === 'sync');
+    const syncUrl = syncTag?.[1];
+    if (!syncUrl) continue;
+
+    const createdAt = event.created_at as number;
+    const existing = latestBySyncUrl.get(syncUrl);
+    if (!existing || createdAt > (existing.created_at as number)) {
+      latestBySyncUrl.set(syncUrl, event);
+    }
+  }
+
+  const guardedMaps = new Set<number>();
+  const guardianCounts = new Map<number, number>();
+  const playerCounts = new Map<number, number>();
+
+  for (const event of latestBySyncUrl.values()) {
+    const tags = event.tags as string[][];
+    const createdAt = event.created_at as number;
+
+    // Skip stale heartbeats (> 3 minutes)
+    if (now - createdAt > 180) continue;
+
+    const statusTag = tags.find(([name]) => name === 'status');
+    if (statusTag?.[1] === 'offline') continue;
+
+    // Check if this server serves all maps
+    const servesAll = tags.some(([name, val]) => name === 'serves' && val === 'all');
+
+    for (const tag of tags) {
+      if (tag[0] !== 'map') continue;
+      const mapId = parseInt(tag[1], 10);
+      if (isNaN(mapId) || !isValidMapId(mapId)) continue;
+
+      const players = tag[2] ? parseInt(tag[2], 10) : 0;
+      guardedMaps.add(mapId);
+      guardianCounts.set(mapId, (guardianCounts.get(mapId) ?? 0) + 1);
+      playerCounts.set(mapId, (playerCounts.get(mapId) ?? 0) + (isNaN(players) ? 0 : players));
+    }
+
+    // If serves all, mark all seed maps as guarded (they can serve them on demand)
+    if (servesAll) {
+      for (const seed of SEED_MAP_IDS) {
+        guardedMaps.add(seed);
+        guardianCounts.set(seed, (guardianCounts.get(seed) ?? 0) + 1);
+      }
+    }
+  }
+
+  return { guardedMaps, guardianCounts, playerCounts };
+}
+
+/**
+ * Choose a birth seed — the seed point with the fewest guardians.
+ * Ties are broken randomly to avoid all lobsters choosing the same one.
+ */
+function chooseBirthSeed(state: MapNetworkState): number {
+  let minGuardians = Infinity;
+  const candidates: number[] = [];
+
+  for (const seed of SEED_MAP_IDS) {
+    const count = state.guardianCounts.get(seed) ?? 0;
+    if (count < minGuardians) {
+      minGuardians = count;
+      candidates.length = 0;
+      candidates.push(seed);
+    } else if (count === minGuardians) {
+      candidates.push(seed);
+    }
+  }
+
+  // Random tie-break
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+/**
+ * Compute the frontier — unguarded maps adjacent to guarded territory.
+ */
+function computeFrontier(guardedSet: Set<number>): number[] {
+  const frontier = new Set<number>();
+
+  for (const mapId of guardedSet) {
+    for (const neighbor of getNeighborMapIds(mapId)) {
+      if (!guardedSet.has(neighbor)) {
+        frontier.add(neighbor);
+      }
+    }
+  }
+
+  return Array.from(frontier);
+}
+
+/**
+ * Score a frontier map for selection.
+ * Higher score = more desirable to guard.
+ */
+function scoreFrontierMap(
+  mapId: number,
+  guardianCount: number,
+  playerCount: number,
+  birthSeed: number,
+): number {
+  // Priority 1: Maps with no guardians get a big bonus
+  const orphanBonus = guardianCount === 0 ? 500 : 0;
+
+  // Priority 2: Fewer existing guardians = higher score
+  const scarcityScore = Math.max(0, 100 - guardianCount * 50);
+
+  // Priority 3: More players = higher demand
+  const demandScore = Math.min(playerCount * 20, 100);
+
+  // Priority 4: Proximity to birth seed (Manhattan distance on grid)
+  const { x: bx, y: by } = { x: birthSeed % 100, y: Math.floor(birthSeed / 100) };
+  const { x: mx, y: my } = { x: mapId % 100, y: Math.floor(mapId / 100) };
+  const distance = Math.abs(bx - mx) + Math.abs(by - my);
+  const proximityScore = Math.max(0, 50 - distance);
+
+  return orphanBonus + scarcityScore + demandScore + proximityScore;
 }
 
 export class MapSelector {
@@ -128,22 +239,22 @@ export class MapSelector {
     this.config = config;
   }
 
-  /** Start the auto-selection process */
+  /** Start the guardian map selection process */
   async start(): Promise<number[]> {
-    console.log(`[MapSelector] Starting auto-selection (target: ${this.config.targetMaps} maps)`);
+    console.log(`[Guardian] Starting map selection (target: ${this.config.targetMaps} frontier maps)`);
 
     const selectedMaps = await this.selectMaps();
 
-    // Start periodic re-evaluation
+    // Periodic re-evaluation
     this.timer = setInterval(async () => {
-      console.log('[MapSelector] Re-evaluating map selection...');
+      console.log('[Guardian] Re-evaluating map selection...');
       await this.selectMaps();
     }, REEVALUATE_INTERVAL_MS);
 
     return selectedMaps;
   }
 
-  /** Stop the auto-selection process */
+  /** Stop the selection process */
   stop(): void {
     if (this.timer) {
       clearInterval(this.timer);
@@ -155,98 +266,59 @@ export class MapSelector {
   private async selectMaps(): Promise<number[]> {
     const relays = this.config.relays ?? DEFAULT_RELAYS;
 
-    // Gather heartbeat data from relays
+    // Gather heartbeat data
     let allEvents: unknown[] = [];
     for (const relay of relays) {
       try {
         const events = await queryRelay(relay);
         allEvents = allEvents.concat(events);
-        if (events.length > 0) break; // Got data from one relay, that's enough
+        if (events.length > 0) break; // Got data, that's enough
       } catch {
         continue;
       }
     }
 
-    // Analyze the data
-    const mapStats = new Map<number, { syncNodes: Set<string>; players: number }>();
-    const now = Math.floor(Date.now() / 1000);
+    // Analyze the network
+    const state = analyzeHeartbeats(allEvents);
 
-    // Deduplicate by sync URL
-    const latestBySyncUrl = new Map<string, Record<string, unknown>>();
-    for (const raw of allEvents) {
-      const event = raw as Record<string, unknown>;
-      const tags = event.tags as string[][] | undefined;
-      if (!tags) continue;
+    // 1. Choose birth seed
+    const birthSeed = chooseBirthSeed(state);
+    console.log(`[Guardian] Birth seed: map ${birthSeed} (guardians: ${state.guardianCounts.get(birthSeed) ?? 0})`);
 
-      const syncTag = tags.find(([name]) => name === 'sync');
-      const syncUrl = syncTag?.[1];
-      if (!syncUrl) continue;
-
-      const createdAt = event.created_at as number;
-      const existing = latestBySyncUrl.get(syncUrl);
-      if (!existing || createdAt > (existing.created_at as number)) {
-        latestBySyncUrl.set(syncUrl, event);
-      }
+    // 2. Build the full guarded set (network + seeds)
+    const guardedSet = new Set(state.guardedMaps);
+    for (const seed of SEED_MAP_IDS) {
+      guardedSet.add(seed);
     }
 
-    for (const event of latestBySyncUrl.values()) {
-      const tags = event.tags as string[][];
-      const createdAt = event.created_at as number;
+    // 3. Compute frontier (adjacent unguarded maps)
+    const frontier = computeFrontier(guardedSet);
 
-      // Skip stale
-      if (now - createdAt > 180) continue;
-
-      const statusTag = tags.find(([name]) => name === 'status');
-      if (statusTag?.[1] === 'offline') continue;
-
-      const syncTag = tags.find(([name]) => name === 'sync');
-      const syncUrl = syncTag?.[1] ?? '';
-
-      for (const tag of tags) {
-        if (tag[0] !== 'map') continue;
-        const mapId = parseInt(tag[1], 10);
-        if (isNaN(mapId) || mapId < 0 || mapId >= TOTAL_MAPS) continue;
-
-        const playerCount = tag[2] ? parseInt(tag[2], 10) : 0;
-        const stats = mapStats.get(mapId) ?? { syncNodes: new Set<string>(), players: 0 };
-        stats.syncNodes.add(syncUrl);
-        stats.players += isNaN(playerCount) ? 0 : playerCount;
-        mapStats.set(mapId, stats);
-      }
-    }
-
-    // Score all maps
-    const scores: MapScore[] = [];
-    for (let mapId = 0; mapId < TOTAL_MAPS; mapId++) {
-      const stats = mapStats.get(mapId);
-      const syncNodes = stats?.syncNodes.size ?? 0;
-      const players = stats?.players ?? 0;
-      scores.push({
+    // 4. Score and select frontier maps
+    const scored = frontier.map((mapId) => ({
+      mapId,
+      score: scoreFrontierMap(
         mapId,
-        syncNodes,
-        players,
-        score: scoreMap(mapId, syncNodes, players),
-      });
+        state.guardianCounts.get(mapId) ?? 0,
+        state.playerCounts.get(mapId) ?? 0,
+        birthSeed,
+      ),
+    }));
+
+    scored.sort((a, b) => b.score - a.score);
+    const selectedFrontier = scored.slice(0, this.config.targetMaps).map((s) => s.mapId);
+
+    // 5. Final map list = birth seed + frontier
+    const finalMaps = [birthSeed, ...selectedFrontier];
+
+    // Update the room manager
+    this.roomManager.updateServedMaps(finalMaps);
+
+    console.log(`[Guardian] Now guarding ${finalMaps.length} maps: seed ${birthSeed} + ${selectedFrontier.length} frontier`);
+    if (selectedFrontier.length > 0) {
+      console.log(`[Guardian]   Frontier maps: ${selectedFrontier.join(', ')}`);
     }
 
-    // Sort by score (highest first) and pick top N
-    scores.sort((a, b) => b.score - a.score);
-    const selected = scores.slice(0, this.config.targetMaps).map((s) => s.mapId);
-
-    console.log(`[MapSelector] Selected ${selected.length} maps:`);
-    const withPlayers = selected.filter((id) => {
-      const stats = mapStats.get(id);
-      return stats && stats.players > 0;
-    });
-    if (withPlayers.length > 0) {
-      console.log(`[MapSelector]   Maps with active players: ${withPlayers.join(', ')}`);
-    }
-    const orphaned = selected.filter((id) => {
-      const stats = mapStats.get(id);
-      return !stats || stats.syncNodes.size === 0;
-    });
-    console.log(`[MapSelector]   Orphaned maps (no sync nodes): ${orphaned.length}`);
-
-    return selected;
+    return finalMaps;
   }
 }

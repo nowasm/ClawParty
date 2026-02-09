@@ -1,9 +1,9 @@
 /**
- * WebSocket Sync Server for ClawParty
+ * WebSocket Sync Server for ClawParty — "Lobster Guardian" Node
  *
- * This server provides real-time multiplayer synchronization for the
- * 10,000-map world grid. It can serve multiple maps simultaneously,
- * creating rooms on-demand as players connect.
+ * Each lobster (AI sync node) is a "guardian" that chooses maps to protect
+ * and provide real-time multiplayer synchronization for. Guardians pick a
+ * seed point as their birthplace and expand outward to adjacent tiles.
  *
  * Usage:
  *   SYNC_URL=wss://your-server.com npx tsx src/index.ts
@@ -11,12 +11,12 @@
  * Environment variables:
  *   PORT              - WebSocket server port (default: 18080)
  *   HOST              - Bind address (default: 0.0.0.0)
- *   SERVED_MAPS       - Comma-separated map IDs or ranges to serve
- *                        (e.g., "0-99,500,1000-1099"). Default: "all"
+ *   SERVED_MAPS       - "all", "auto", or comma-separated IDs/ranges. Default: "auto"
  *   SYNC_URL          - Public WebSocket URL for players to connect (wss://...)
  *   NOSTR_SECRET_KEY  - Nostr secret key (hex or nsec) for heartbeat publishing
  *   NODE_REGION       - Region identifier for this node (e.g., "asia-east")
  *   MAX_PLAYERS       - Maximum total players across all rooms (default: 200)
+ *   TARGET_MAPS       - How many frontier maps to guard beyond the birth seed (default: 5)
  */
 
 import { WebSocketServer } from 'ws';
@@ -25,7 +25,6 @@ import { RoomManager } from './roomManager.js';
 import { isValidMapId } from './mapRegistry.js';
 import { Announcer, parseSecretKey } from './announcer.js';
 import { MapSelector } from './mapSelector.js';
-import { publishScene, unpublishScene, type ScenePublishConfig } from './publish.js';
 import type { ClientMessage, ServerMessage } from './protocol.js';
 
 // ============================================================================
@@ -40,13 +39,6 @@ const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS ?? '200', 10);
 const NOSTR_SECRET_KEY = process.env.NOSTR_SECRET_KEY ?? '';
 const CLEANUP_INTERVAL_MS = 30000; // Clean up idle connections every 30s
 const MAX_IDLE_MS = 120000; // Disconnect after 2 minutes of inactivity
-
-// Scene auto-publish configuration (optional)
-const SCENE_TITLE = process.env.SCENE_TITLE ?? 'AI World';
-const SCENE_SUMMARY = process.env.SCENE_SUMMARY ?? '';
-const SCENE_IMAGE = process.env.SCENE_IMAGE ?? '';
-const SCENE_PRESET = process.env.SCENE_PRESET ?? '';
-const SCENE_DTAG = process.env.SCENE_DTAG ?? 'my-world';
 
 /**
  * Parse the SERVED_MAPS environment variable.
@@ -84,8 +76,8 @@ function parseServedMaps(input: string): 'all' | 'auto' | number[] {
   return [...new Set(maps)].sort((a, b) => a - b);
 }
 
-const TARGET_MAPS = parseInt(process.env.TARGET_MAPS ?? '50', 10);
-const servedMapsConfig = parseServedMaps(process.env.SERVED_MAPS ?? 'all');
+const TARGET_MAPS = parseInt(process.env.TARGET_MAPS ?? '5', 10);
+const servedMapsConfig = parseServedMaps(process.env.SERVED_MAPS ?? 'auto');
 
 // For auto mode, start with 'all' initially, then let MapSelector narrow it down
 const servedMaps: 'all' | number[] = servedMapsConfig === 'auto' ? 'all' : servedMapsConfig;
@@ -109,26 +101,13 @@ if (NOSTR_SECRET_KEY) {
     process.exit(1);
   }
 }
-// Build scene publish config (used for auto-publish and announcer scene address)
-let scenePublishConfig: ScenePublishConfig | null = null;
 if (secretKey && SYNC_URL) {
-  scenePublishConfig = {
-    secretKey,
-    syncUrl: SYNC_URL,
-    dTag: SCENE_DTAG,
-    title: SCENE_TITLE,
-    summary: SCENE_SUMMARY,
-    image: SCENE_IMAGE,
-    preset: SCENE_PRESET,
-  };
-
   announcer = new Announcer({
     secretKey,
     syncUrl: SYNC_URL,
     region: NODE_REGION,
     maxPlayers: MAX_PLAYERS,
     roomManager,
-    sceneDTag: SCENE_DTAG,
   });
 }
 
@@ -270,7 +249,7 @@ wss.on('listening', async () => {
 
   console.log('');
   console.log('='.repeat(60));
-  console.log('  ClawParty Sync Node');
+  console.log('  ClawParty Lobster Guardian');
   console.log('='.repeat(60));
   console.log(`  WebSocket:   ws://${HOST}:${PORT}`);
   console.log(`  Sync URL:    ${SYNC_URL || '(not set)'}`);
@@ -282,19 +261,10 @@ wss.on('listening', async () => {
   // Start map auto-selector if in auto mode
   if (mapSelector) {
     const selected = await mapSelector.start();
-    console.log(`[MapSelector] Auto-selected ${selected.length} maps to serve`);
+    console.log(`[Guardian] Guarding ${selected.length} maps (birth seed + frontier)`);
   }
 
-  // Auto-publish scene and start heartbeat if configured
-  if (scenePublishConfig) {
-    // Publish scene (kind 30311) so it appears on ClawParty
-    try {
-      await publishScene(scenePublishConfig);
-    } catch (err) {
-      console.error(`[Startup] Failed to publish scene: ${(err as Error).message}`);
-    }
-  }
-
+  // Start heartbeat announcer
   if (announcer) {
     await announcer.start();
   } else if (!NOSTR_SECRET_KEY) {
@@ -309,7 +279,7 @@ wss.on('listening', async () => {
   }
 
   console.log('');
-  console.log('Waiting for players...');
+  console.log('Guarding maps, waiting for players...');
 });
 
 // Periodic cleanup of idle connections
@@ -334,15 +304,6 @@ async function shutdown() {
       await announcer.stop();
     } catch (err) {
       console.error(`[Shutdown] Failed to stop announcer: ${(err as Error).message}`);
-    }
-  }
-
-  // Unpublish scene (set status to "ended")
-  if (scenePublishConfig) {
-    try {
-      await unpublishScene(scenePublishConfig);
-    } catch (err) {
-      console.error(`[Shutdown] Failed to unpublish scene: ${(err as Error).message}`);
     }
   }
 
