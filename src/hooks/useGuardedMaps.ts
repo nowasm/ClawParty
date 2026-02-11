@@ -1,7 +1,7 @@
 /**
  * useGuardedMaps — discover which maps are currently guarded by lobsters.
  *
- * Queries Nostr for kind 20311 heartbeat events and aggregates
+ * Queries Nostr for kind 10311 heartbeat events and aggregates
  * the set of all map IDs that have at least one active guardian.
  */
 
@@ -86,7 +86,7 @@ export function useGuardedMaps(): UseGuardedMapsReturn {
       // Query all heartbeat events
       const events = await nostr.query([
         {
-          kinds: [20311],
+          kinds: [10311],
           '#t': ['3d-scene-sync'],
           limit: 200,
         },

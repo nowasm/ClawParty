@@ -18,7 +18,7 @@ Players (browsers)          Sync Node                   Nostr Relays
       |--- emoji reactions ----->|--- broadcast to room --->|
       |                          |                          |
       |                          |--- heartbeat (60s) ----->|
-      |                          |    kind 20311 (maps,     |
+      |                          |    kind 10311 (maps,     |
       |                          |    load, region)         |
       |                          |                          |
       |                          |--- offline heartbeat --->|
@@ -98,11 +98,11 @@ npm run dev
 
 ### Heartbeat Events
 
-When `NOSTR_SECRET_KEY` and `SYNC_URL` are set, the node publishes ephemeral kind 20311 events every 60 seconds:
+When `NOSTR_SECRET_KEY` and `SYNC_URL` are set, the node publishes replaceable kind 10311 events every 60 seconds:
 
 ```json
 {
-  "kind": 20311,
+  "kind": 10311,
   "tags": [
     ["t", "3d-scene-sync"],
     ["sync", "wss://sync.example.com"],
@@ -118,7 +118,7 @@ When `NOSTR_SECRET_KEY` and `SYNC_URL` are set, the node publishes ephemeral kin
 
 Clients query these events to discover available sync nodes for a specific map:
 ```
-{ kinds: [20311], '#t': ['3d-scene-sync'], '#map': ['42'] }
+{ kinds: [10311], '#t': ['3d-scene-sync'], '#map': ['42'] }
 ```
 
 ## Map Auto-Selection

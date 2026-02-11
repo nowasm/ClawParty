@@ -38,7 +38,7 @@ ClawParty uses standard Nostr NIPs:
 | Avatar Storage | [NIP-78](https://github.com/nostr-protocol/nips/blob/master/78.md) | Kind 30078 application-specific data |
 | Reactions | [NIP-25](https://github.com/nostr-protocol/nips/blob/master/25.md) | Kind 7 emoji reactions |
 | Relay Management | [NIP-65](https://github.com/nostr-protocol/nips/blob/master/65.md) | Relay list metadata |
-| Sync Heartbeat | Ephemeral | Kind 20311 for AI competition and discovery |
+| Sync Heartbeat | Replaceable | Kind 10311 for AI competition and discovery |
 
 See [NIP.md](./NIP.md) for the full protocol specification.
 

@@ -2,7 +2,7 @@
  * Heartbeat Announcer — publishes ephemeral events to Nostr relays
  * so clients can discover which maps this sync node serves.
  *
- * Publishes kind 20311 events (ephemeral) with:
+ * Publishes kind 10311 events (replaceable) with:
  *   - t: "3d-scene-sync"            (discovery tag)
  *   - map: "<mapId>"                (one tag per served map, relay-indexed)
  *   - sync: "wss://..."             (this node's public WebSocket URL)
@@ -44,7 +44,7 @@ export interface AnnouncerConfig {
 }
 
 /**
- * Build a kind 20311 ephemeral heartbeat event.
+ * Build a kind 10311 replaceable heartbeat event.
  *
  * Tags for discovery:
  *   - `#t: ["3d-scene-sync"]` — discovery filter
@@ -96,7 +96,7 @@ function buildHeartbeatEvent(
   }
 
   return {
-    kind: 20311,
+    kind: 10311,
     created_at: Math.floor(Date.now() / 1000),
     tags,
     content: '',

@@ -2,7 +2,7 @@
  * Sync Relay Competition Protocol
  *
  * Defines types and utilities for the AI sync relay election system.
- * AI agents publish heartbeat events (kind 20311, ephemeral) to announce
+ * AI agents publish heartbeat events (kind 10311, replaceable) to announce
  * their availability and current status for a scene's sync service.
  *
  * Competition flow:
@@ -23,8 +23,11 @@ import type { NostrEvent } from '@nostrify/nostrify';
 // Constants
 // ============================================================================
 
-/** Ephemeral event kind for sync relay heartbeats */
-export const SYNC_HEARTBEAT_KIND = 20311;
+/** Replaceable event kind for sync relay heartbeats (10000-19999 range).
+ *  Previously 20311 (ephemeral), but relays don't store ephemeral events,
+ *  making one-shot queries return empty results. Replaceable events store
+ *  the latest event per pubkey+kind, which is ideal for heartbeats. */
+export const SYNC_HEARTBEAT_KIND = 10311;
 
 /** Discovery tag for sync relay heartbeats */
 export const SYNC_HEARTBEAT_TAG = '3d-scene-sync';
@@ -75,7 +78,7 @@ export interface SyncRelayInfo {
 // ============================================================================
 
 /**
- * Parse a kind 20311 heartbeat event into SyncRelayInfo.
+ * Parse a kind 10311 heartbeat event into SyncRelayInfo.
  * Returns null if the event is invalid.
  */
 export function parseHeartbeat(event: NostrEvent): SyncRelayInfo | null {

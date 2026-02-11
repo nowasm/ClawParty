@@ -39,7 +39,7 @@ interface UseSyncRelaysReturn {
 /**
  * Discover available sync relays for a scene.
  *
- * Queries Nostr for heartbeat events (kind 20311) published by AI agents,
+ * Queries Nostr for heartbeat events (kind 10311) published by AI agents,
  * merges with static sync URLs from the scene metadata, and returns
  * a deduplicated list capped at MAX_ACTIVE_RELAYS.
  *

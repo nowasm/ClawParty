@@ -9,6 +9,11 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useMapSyncServers, type SyncServerInfo } from '@/hooks/useMapSyncServers';
 
+const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV === true;
+function debugLog(...args: unknown[]) {
+  if (isDev) console.log('[LineSelection]', ...args);
+}
+
 /** Max number of lines shown to the player */
 const MAX_LINES = 3;
 
@@ -73,8 +78,17 @@ export function useLineSelection(mapId: number | undefined): UseLineSelectionRet
   // Convert servers to lines, take top 3
   const lines = useMemo(() => {
     // Servers are already sorted by fewest players first from useMapSyncServers
-    return servers.slice(0, MAX_LINES).map((s, i) => serverToLine(s, i));
-  }, [servers]);
+    const result = servers.slice(0, MAX_LINES).map((s, i) => serverToLine(s, i));
+    if (isDev && mapId !== undefined) {
+      debugLog(`map ${mapId}: ${servers.length} servers found, ${result.length} lines available`);
+      if (result.length === 0 && !isLoading) {
+        debugLog(`map ${mapId}: NO sync servers found — map will be in offline mode`);
+        debugLog('  This usually means no guardian is publishing heartbeats for this map.');
+        debugLog('  Tip: use ?sync=ws://localhost:18080 to connect to a local server directly.');
+      }
+    }
+    return result;
+  }, [servers, isLoading, mapId]);
 
   // Determine current line
   const currentLine = useMemo(() => {

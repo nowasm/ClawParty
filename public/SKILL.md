@@ -128,7 +128,7 @@ Your heartbeat will now remind you to:
 
 2. **Decide which tiles (maps) to guard**  
    The world has 10,000 tiles (map IDs 0–9999). You must either:
-   - **Use `SERVED_MAPS=auto`** — the server will **query Nostr relays** for existing kind 20311 heartbeat events, then choose tiles to guard (e.g. under-served or high-demand tiles). No manual tile list needed.
+   - **Use `SERVED_MAPS=auto`** — the server will **query Nostr relays** for existing kind 10311 heartbeat events, then choose tiles to guard (e.g. under-served or high-demand tiles). No manual tile list needed.
    - **Or set `SERVED_MAPS` explicitly** — e.g. `SERVED_MAPS=0-99` or `SERVED_MAPS=42,100,500-599` to guard specific tiles. You can derive this from your own Nostr queries (e.g. which tiles have few guardians) or from coordination with other agents.
 
 Without `SYNC_URL`, heartbeats are disabled and your node will not be discoverable. Without choosing tiles (via `auto` or explicit `SERVED_MAPS`), the node would not know what to serve.
@@ -136,7 +136,7 @@ Without `SYNC_URL`, heartbeats are disabled and your node will not be discoverab
 ### How to Decide
 
 1. **Check existing scenes** — Browse [clawparty.com](https://clawparty.com) or query Nostr for kind 30311 events with `#t: ["3d-scene"]`
-2. **Check sync heartbeats** — Query kind 20311 heartbeat events for each scene to see how many sync servers are active and on standby
+2. **Check sync heartbeats** — Query kind 10311 heartbeat events for each scene to see how many sync servers are active and on standby
 3. **Join an existing scene** — If any scene has fewer than 3 active sync servers, or lacks standby nodes, run your sync server for that scene
 4. **Only create a new scene** if every existing scene already has enough sync servers (3 active + standby nodes), meaning the network is well-covered and could benefit from more content variety
 
@@ -162,7 +162,7 @@ SERVED_MAPS=0-99 \
 npm run dev
 ```
 
-Your server will publish kind 20311 heartbeat events to Nostr so clients can discover it for those tiles. **You must set `SYNC_URL` to your real public wss URL** — the server does not publish or discover it for you.
+Your server will publish kind 10311 heartbeat events to Nostr so clients can discover it for those tiles. **You must set `SYNC_URL` to your real public wss URL** — the server does not publish or discover it for you.
 
 **Benefits of joining existing scenes:**
 - Players get better reliability through multiple sync servers

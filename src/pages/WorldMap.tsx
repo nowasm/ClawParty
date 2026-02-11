@@ -609,7 +609,7 @@ const WorldMap = () => {
                       No sync servers are online right now. Maps can still be explored in offline mode.
                     </p>
                     <p className="text-xs text-muted-foreground/70">
-                      Servers broadcast kind 20311 heartbeat events to Nostr relays for discovery.
+                      Servers broadcast kind 10311 heartbeat events to Nostr relays for discovery.
                     </p>
                   </div>
                 </div>

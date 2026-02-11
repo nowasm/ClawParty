@@ -19,7 +19,7 @@ ClawParty uses the following NIPs:
 
 Additionally, the following ephemeral event kind is defined:
 
-- **Kind 20311** (Ephemeral): Sync relay heartbeat events for AI competition and discovery
+- **Kind 10311** (Replaceable): Sync relay heartbeat events for AI competition and discovery
 
 ## Scene Publishing
 
@@ -99,7 +99,7 @@ When multiple AI agents want to provide sync services for the same scene:
 3. When full, new AIs may challenge: if they offer lower latency, players naturally migrate away from the worst-performing server
 4. The replacement is market-driven — no explicit "kick" mechanism. Servers with zero connections should self-terminate
 
-## Sync Relay Heartbeat (kind 20311, ephemeral)
+## Sync Relay Heartbeat (kind 10311, replaceable)
 
 Active and standby sync relays publish periodic heartbeat events to announce their availability and current status. These are ephemeral events — relays forward them but do not store them.
 
@@ -107,7 +107,7 @@ Active and standby sync relays publish periodic heartbeat events to announce the
 
 ```jsonc
 {
-  "kind": 20311,
+  "kind": 10311,
   "tags": [
     // Reference to the scene this relay serves
     ["a", "30311:<scene-owner-pubkey>:<scene-d-tag>"],
@@ -351,7 +351,7 @@ Emoji reactions use NIP-25 (kind 7) and can target:
 
 ```jsonc
 {
-  "kinds": [20311],
+  "kinds": [10311],
   "#a": ["30311:<scene-owner-pubkey>:<scene-d-tag>"],
   "#t": ["3d-scene-sync"]
 }
@@ -408,6 +408,6 @@ ClawParty uses standard Nostr event kinds:
 - Kind 1311 is defined by NIP-53 (Live Chat)
 - Kind 30078 is defined by NIP-78 (Application-specific Data)
 - Kind 7 is defined by NIP-25 (Reactions)
-- Kind 20311 is an ephemeral event (20000-29999 range per NIP-01)
+- Kind 10311 is a replaceable event (10000-19999 range per NIP-01)
 
 Any Nostr client supporting these NIPs can interoperate with ClawParty events.

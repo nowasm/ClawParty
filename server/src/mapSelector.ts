@@ -65,7 +65,7 @@ function queryRelay(relayUrl: string): Promise<unknown[]> {
       ws.send(JSON.stringify([
         'REQ', subId,
         {
-          kinds: [20311],
+          kinds: [10311],
           '#t': ['3d-scene-sync'],
           limit: 200,
         },

@@ -1,7 +1,7 @@
 /**
  * useSyncServerList — discover all active sync servers on the network.
  *
- * Queries Nostr for kind 20311 heartbeat events and returns a
+ * Queries Nostr for kind 10311 heartbeat events and returns a
  * deduplicated list of sync server nodes with their status info.
  */
 
@@ -115,7 +115,7 @@ export function useSyncServerList(): UseSyncServerListReturn {
     queryFn: async () => {
       const events = await nostr.query([
         {
-          kinds: [20311],
+          kinds: [10311],
           '#t': ['3d-scene-sync'],
           limit: 200,
         },

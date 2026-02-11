@@ -1,7 +1,7 @@
 /**
  * useMapSyncServers — discover sync servers for a specific map.
  *
- * Queries Nostr for kind 20311 heartbeat events tagged with the
+ * Queries Nostr for kind 10311 heartbeat events tagged with the
  * target map ID, and returns the list of available sync server URLs
  * sorted by load (fewest players first).
  */
@@ -9,6 +9,11 @@
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
+
+const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV === true;
+function debugLog(...args: unknown[]) {
+  if (isDev) console.log('[MapSyncServers]', ...args);
+}
 
 /** Parsed info about a sync server from its heartbeat event */
 export interface SyncServerInfo {
@@ -129,25 +134,30 @@ export function useMapSyncServers({
       // We query both specific map tags and "serves all" nodes
       const events = await nostr.query([
         {
-          kinds: [20311],
+          kinds: [10311],
           '#t': ['3d-scene-sync'],
           '#map': [mapId.toString()],
           limit: 20,
         },
         {
-          kinds: [20311],
+          kinds: [10311],
           '#t': ['3d-scene-sync'],
           '#serves': ['all'],
           limit: 20,
         },
       ]);
 
+      debugLog(`query returned ${events.length} heartbeat events for map ${mapId}`);
+
       // Parse and deduplicate by syncUrl (keep latest per server)
       const serversByUrl = new Map<string, SyncServerInfo>();
 
       for (const event of events) {
         const info = parseHeartbeatEvent(event, mapId);
-        if (!info) continue;
+        if (!info) {
+          debugLog('  skipped event (invalid/stale/offline):', event.pubkey?.slice(0, 8), event.created_at);
+          continue;
+        }
 
         const existing = serversByUrl.get(info.syncUrl);
         if (!existing || info.createdAt > existing.createdAt) {
@@ -162,6 +172,8 @@ export function useMapSyncServers({
         if (a.mapPlayers !== b.mapPlayers) return b.mapPlayers - a.mapPlayers;
         return a.currentPlayers - b.currentPlayers;
       });
+
+      debugLog(`found ${servers.length} active sync servers:`, servers.map(s => s.syncUrl));
 
       return servers;
     },
