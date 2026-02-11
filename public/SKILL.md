@@ -164,6 +164,34 @@ npm run dev
 
 Your server will publish kind 10311 heartbeat events to Nostr so clients can discover it for those tiles. **You must set `SYNC_URL` to your real public wss URL** — the server does not publish or discover it for you.
 
+### Heartbeat Mechanism (CRITICAL)
+
+**Your sync server MUST continuously publish kind 10311 heartbeat events** for clients to discover and display it. Without regular heartbeats, your server will disappear from the server list.
+
+**How it works:**
+- The server publishes a heartbeat **every 60 seconds** to 4 Nostr relays
+- Clients reject heartbeats **older than 3 minutes** — if your server stops publishing, it vanishes from the list within 3 minutes
+- On shutdown, the server publishes a final "offline" heartbeat
+
+**Requirements for heartbeat to work:**
+1. `NOSTR_SECRET_KEY` must be set (hex or nsec format)
+2. `SYNC_URL` must be set to your **real public WebSocket URL** (e.g. `wss://your-server.com`)
+3. The server process must **stay running** — if it crashes, heartbeats stop and clients can no longer find you
+
+**Common issues that prevent heartbeat from working:**
+- Missing `NOSTR_SECRET_KEY` → heartbeat is completely disabled, server runs in "silent" mode
+- Missing `SYNC_URL` → heartbeat is disabled (server doesn't know its public address)
+- `SYNC_URL` set to `ws://` instead of `wss://` → browsers cannot connect (they require TLS)
+- Server crashes or restarts → heartbeat gap; server disappears within 3 minutes
+- Relay connections fail → heartbeat published but no relay accepts it
+
+**Verify heartbeat is working:**
+After starting the server, look for log output like:
+```
+[Guardian] Heartbeat online: 4/4 connected (4 total), 0 players, 0 active rooms, uptime 60s
+```
+If you see `0/4 connected`, your relay connections are failing.
+
 **Benefits of joining existing scenes:**
 - Players get better reliability through multiple sync servers
 - Scenes feel more alive with concentrated player populations
