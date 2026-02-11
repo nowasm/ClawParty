@@ -4,6 +4,7 @@ import { useSeoMeta } from '@unhead/react';
 import {
   Globe, Users, ZoomIn, ZoomOut, Maximize2,
   Flame, ArrowRight, Map as MapIcon, Crown, Shield,
+  Server, Activity, Clock, MapPinned, Wifi,
 } from 'lucide-react';
 import { SiteHeader } from '@/components/scene/SiteHeader';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ import {
   toMapId, toMapCoords, getDefaultPreset,
 } from '@/lib/mapRegistry';
 import { useGuardedMaps, type GuardedMapInfo } from '@/hooks/useGuardedMaps';
+import { useSyncServerList, type SyncServerNode } from '@/hooks/useSyncServerList';
 import { getPresetByMapId } from '@/lib/scene';
 
 // ============================================================================
@@ -160,6 +162,155 @@ function MapRankSkeleton() {
 }
 
 // ============================================================================
+// SyncServerCard — card for a sync server node
+// ============================================================================
+
+/** Format uptime seconds into a human-readable string */
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function SyncServerCard({ server }: { server: SyncServerNode }) {
+  const loadPercent = server.maxPlayers > 0
+    ? Math.round((server.currentPlayers / server.maxPlayers) * 100)
+    : 0;
+
+  const loadColor = loadPercent > 70
+    ? 'text-red-500'
+    : loadPercent > 40
+      ? 'text-amber-500'
+      : 'text-emerald-500';
+
+  const loadBarColor = loadPercent > 70
+    ? 'bg-red-500'
+    : loadPercent > 40
+      ? 'bg-amber-500'
+      : 'bg-emerald-500';
+
+  // Display a short version of the sync URL
+  const displayUrl = (() => {
+    try {
+      const url = new URL(server.syncUrl);
+      return url.host;
+    } catch {
+      return server.syncUrl;
+    }
+  })();
+
+  return (
+    <Card className="group relative overflow-hidden transition-all duration-300 hover:shadow-md hover:shadow-primary/5 hover:border-primary/30">
+      {/* Status indicator bar */}
+      <div className={cn(
+        'h-1 w-full',
+        server.status === 'active' ? 'bg-emerald-500' : 'bg-amber-500',
+      )} />
+
+      <CardContent className="p-4 space-y-3">
+        {/* Header: URL + Status */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={cn(
+              'flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-lg',
+              'bg-primary/10',
+            )}>
+              <Server className="h-4 w-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold truncate">{displayUrl}</p>
+              <p className="text-[10px] text-muted-foreground font-mono truncate">
+                {server.pubkey.slice(0, 12)}...
+              </p>
+            </div>
+          </div>
+          <Badge
+            variant="outline"
+            className={cn(
+              'flex-shrink-0 text-[10px] gap-1 h-5',
+              server.status === 'active' ? 'text-emerald-600 border-emerald-500/30' : 'text-amber-600 border-amber-500/30',
+            )}
+          >
+            <span className={cn(
+              'w-1.5 h-1.5 rounded-full',
+              server.status === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500',
+            )} />
+            {server.status}
+          </Badge>
+        </div>
+
+        {/* Load bar */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Load</span>
+            <span className={cn('font-medium', loadColor)}>
+              {server.currentPlayers}/{server.maxPlayers} ({loadPercent}%)
+            </span>
+          </div>
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className={cn('h-full rounded-full transition-all duration-500', loadBarColor)}
+              style={{ width: `${Math.min(100, loadPercent)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+          <div className="flex items-center gap-1" title="Active rooms">
+            <Activity className="h-3 w-3" />
+            <span>{server.activeRooms} room{server.activeRooms !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="flex items-center gap-1" title="Maps served">
+            <MapPinned className="h-3 w-3" />
+            <span>{server.servesAll ? 'All maps' : `${server.servedMapIds.length} map${server.servedMapIds.length !== 1 ? 's' : ''}`}</span>
+          </div>
+          {server.region && (
+            <div className="flex items-center gap-1" title="Region">
+              <Globe className="h-3 w-3" />
+              <span>{server.region}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1" title="Uptime">
+            <Clock className="h-3 w-3" />
+            <span>{formatUptime(server.uptime)}</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SyncServerSkeleton() {
+  return (
+    <Card className="overflow-hidden">
+      <Skeleton className="h-1 w-full" />
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start gap-2">
+          <Skeleton className="w-8 h-8 rounded-lg flex-shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+          <Skeleton className="h-5 w-14 rounded-full" />
+        </div>
+        <div className="space-y-1">
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-1.5 w-full rounded-full" />
+        </div>
+        <div className="flex gap-3">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-16" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================================================
 // WorldMap Component
 // ============================================================================
 
@@ -176,6 +327,7 @@ const WorldMap = () => {
   const gridRef = useRef<HTMLDivElement>(null);
 
   const { guardedMaps, guardedSet, isEnterable, isLoading } = useGuardedMaps();
+  const { servers: syncServers, isLoading: serversLoading } = useSyncServerList();
 
   const visibleCells = ZOOM_LEVELS[zoomIndex];
 
@@ -417,6 +569,49 @@ const WorldMap = () => {
                   <p className="text-muted-foreground">
                     No guardians active yet. Waiting for lobsters to protect the world...
                   </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </section>
+
+      {/* Active Sync Servers */}
+      <section className="container py-8 md:py-10">
+        <div className="space-y-6">
+          <div className="space-y-1">
+            <h2 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2.5">
+              <Wifi className="h-6 w-6 text-primary" />
+              Active Sync Servers
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Guardian nodes providing real-time multiplayer sync. Servers publish heartbeats every 60 seconds via Nostr.
+            </p>
+          </div>
+
+          {serversLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Array.from({ length: 3 }).map((_, i) => <SyncServerSkeleton key={i} />)}
+            </div>
+          ) : syncServers.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {syncServers.map((server) => (
+                <SyncServerCard key={server.syncUrl} server={server} />
+              ))}
+            </div>
+          ) : (
+            <Card className="border-dashed">
+              <CardContent className="py-12 px-8 text-center">
+                <div className="max-w-sm mx-auto space-y-4">
+                  <Server className="h-12 w-12 text-muted-foreground/30 mx-auto" />
+                  <div className="space-y-2">
+                    <p className="text-muted-foreground">
+                      No sync servers are online right now. Maps can still be explored in offline mode.
+                    </p>
+                    <p className="text-xs text-muted-foreground/70">
+                      Servers broadcast kind 20311 heartbeat events to Nostr relays for discovery.
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
