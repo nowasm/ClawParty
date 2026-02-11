@@ -9,6 +9,7 @@
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { DEFAULT_RELAY_URLS } from '@/lib/scene';
 
 const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV === true;
 function debugLog(...args: unknown[]) {
@@ -133,7 +134,10 @@ export function useMapSyncServers({
       // Query all heartbeat events using only single-letter tag filters.
       // Multi-letter tags like #map and #serves are NOT indexed by relays,
       // so we fetch all heartbeats and filter client-side.
-      const events = await nostr.query([
+      // Use nostr.group() to query from the specific discovery relays
+      // where heartbeats are published, bypassing user relay configuration.
+      const discoveryRelays = nostr.group(DEFAULT_RELAY_URLS);
+      const events = await discoveryRelays.query([
         {
           kinds: [10311],
           '#t': ['3d-scene-sync'],
@@ -183,8 +187,8 @@ export function useMapSyncServers({
       return servers;
     },
     enabled: enabled && mapId !== undefined,
-    refetchInterval: 60_000, // Refresh every 60 seconds
-    staleTime: 30_000, // Consider stale after 30 seconds
+    refetchInterval: 30_000, // Refresh every 30 seconds
+    staleTime: 15_000, // Consider stale after 15 seconds
   });
 
   const servers = query.data ?? [];

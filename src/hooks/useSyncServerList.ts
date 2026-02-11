@@ -8,6 +8,7 @@
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { DEFAULT_RELAY_URLS } from '@/lib/scene';
 
 /** Parsed sync server node info from a heartbeat event */
 export interface SyncServerNode {
@@ -113,7 +114,12 @@ export function useSyncServerList(): UseSyncServerListReturn {
   const query = useQuery({
     queryKey: ['sync-server-list'],
     queryFn: async () => {
-      const events = await nostr.query([
+      // Query from the specific relays where heartbeats are published.
+      // Using nostr.group() bypasses the user's configured relay list and
+      // ensures we always reach the discovery relays, even if the user
+      // has customised their relay set.
+      const discoveryRelays = nostr.group(DEFAULT_RELAY_URLS);
+      const events = await discoveryRelays.query([
         {
           kinds: [10311],
           '#t': ['3d-scene-sync'],
@@ -149,8 +155,8 @@ export function useSyncServerList(): UseSyncServerListReturn {
 
       return servers;
     },
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
   });
 
   return {
