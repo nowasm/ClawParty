@@ -23,6 +23,92 @@ export const DEFAULT_RELAY_URLS = [
   'wss://nos.lol',
 ];
 
+// ============================================================================
+// Avatar Animation Interface Contract (AAIC)
+// ============================================================================
+
+/**
+ * Required animations that every custom GLB avatar must include.
+ * These animations are the "contract" between the avatar model and the system.
+ * If a model is missing any of these, it fails validation.
+ */
+export const REQUIRED_ANIMATIONS = [
+  'idle',   // Default standing pose
+  'walk',   // Normal movement
+  'run',    // Fast movement
+  'wave',   // Greeting gesture
+  'laugh',  // Happy / laughing
+  'angry',  // Angry expression
+  'think',  // Thinking pose
+  'talk',   // Speaking animation
+] as const;
+
+export type RequiredAnimation = typeof REQUIRED_ANIMATIONS[number];
+
+/**
+ * Standard humanoid bone names that must be present in a custom GLB avatar.
+ * Based on a simplified humanoid rig (similar to VRM / Mixamo standard).
+ */
+export const REQUIRED_BONES = [
+  'Hips',
+  'Spine',
+  'Head',
+  'LeftUpperArm',
+  'LeftLowerArm',
+  'RightUpperArm',
+  'RightLowerArm',
+  'LeftUpperLeg',
+  'LeftLowerLeg',
+  'RightUpperLeg',
+  'RightLowerLeg',
+] as const;
+
+export type RequiredBone = typeof REQUIRED_BONES[number];
+
+// ============================================================================
+// Model Constraints
+// ============================================================================
+
+/** Maximum triangle count for a single avatar model */
+export const MAX_AVATAR_TRIANGLES = 20_000;
+
+/** Maximum file size in bytes for a GLB avatar (5 MB) */
+export const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024;
+
+/** Maximum texture dimension (width or height) */
+export const MAX_TEXTURE_SIZE = 1024;
+
+// ============================================================================
+// AAIC Validation Result
+// ============================================================================
+
+export interface AAICValidationResult {
+  /** Whether the model passes all validation checks */
+  valid: boolean;
+  /** Triangle count of the model */
+  triangleCount: number;
+  /** File size in bytes */
+  fileSize: number;
+  /** Whether the model contains a standard humanoid rig */
+  hasHumanoidRig: boolean;
+  /** List of required animations that are missing from the model */
+  missingAnimations: string[];
+  /** List of required bones that are missing from the model */
+  missingBones: string[];
+  /** List of animations found in the model */
+  foundAnimations: string[];
+  /** List of bones found in the model */
+  foundBones: string[];
+  /** Human-readable error messages */
+  errors: string[];
+  /** Human-readable warning messages (non-blocking) */
+  warnings: string[];
+}
+
+// ============================================================================
+// Avatar Presets (built-in procedural lobster characters)
+// ============================================================================
+
 /** Preset avatar definitions */
 export interface AvatarPreset {
   id: string;
@@ -121,6 +207,8 @@ export interface AvatarConfig {
   hairStyle: string;
   hairColor: string;
   displayName: string;
+  /** URL to a custom GLB avatar model (optional — falls back to preset lobster) */
+  modelUrl?: string;
 }
 
 /** Scene metadata parsed from kind 30311 tags */
@@ -185,6 +273,7 @@ export function parseAvatarConfig(content: string): AvatarConfig {
       hairStyle: parsed.hairStyle || 'short',
       hairColor: parsed.hairColor || '#3d2914',
       displayName: parsed.displayName || '',
+      modelUrl: parsed.modelUrl || undefined,
     };
   } catch {
     return {
@@ -221,8 +310,8 @@ export interface ScenePreset {
   icon: string;
   /** CSS gradient for the card background */
   gradient: string;
-  /** Seed map ID on the 100x100 grid */
-  mapId: number;
+  /** Optional map ID for display title (e.g. preset name for this tile) */
+  mapId?: number;
 }
 
 export const SCENE_PRESETS: ScenePreset[] = [
@@ -282,8 +371,8 @@ export const SCENE_PRESETS: ScenePreset[] = [
   },
 ];
 
-/** Get the scene preset for a seed map ID, if any */
-export function getSeedPreset(mapId: number): ScenePreset | undefined {
+/** Get the scene preset that has a display title for this map ID, if any */
+export function getPresetByMapId(mapId: number): ScenePreset | undefined {
   return SCENE_PRESETS.find((p) => p.mapId === mapId);
 }
 

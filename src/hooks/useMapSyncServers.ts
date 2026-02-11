@@ -155,9 +155,13 @@ export function useMapSyncServers({
         }
       }
 
-      // Sort by total player load (balance load across servers)
+      // Sort: prefer servers that already have players on this map (so later players
+      // join the same node as the first), then by total load (fewest players first)
       const servers = Array.from(serversByUrl.values());
-      servers.sort((a, b) => a.currentPlayers - b.currentPlayers);
+      servers.sort((a, b) => {
+        if (a.mapPlayers !== b.mapPlayers) return b.mapPlayers - a.mapPlayers;
+        return a.currentPlayers - b.currentPlayers;
+      });
 
       return servers;
     },

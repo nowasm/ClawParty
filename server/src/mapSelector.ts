@@ -1,20 +1,17 @@
 /**
- * Map Selector — Guardian birth + adjacent frontier expansion.
+ * Map Selector — Guardian start point + adjacent frontier expansion.
  *
  * Each lobster guardian:
- *   1. Picks a seed point as its "birthplace" (the seed with fewest guardians)
+ *   1. Picks a start map (the one with fewest guardians, or center if network is empty)
  *   2. Expands outward from the guarded territory (8-directional adjacency)
  *   3. Only selects maps on the frontier (adjacent to already-guarded maps)
- *
- * This creates a naturally growing "green zone" of guarded tiles that
- * expands from the 6 seed points as more lobsters join the network.
  */
 
 import WebSocket from 'ws';
 import {
-  SEED_MAP_IDS,
   getNeighborMapIds,
   isValidMapId,
+  toMapId,
 } from './mapRegistry.js';
 import type { RoomManager } from './roomManager.js';
 
@@ -28,7 +25,7 @@ const DEFAULT_RELAYS = [
 const REEVALUATE_INTERVAL_MS = 30 * 60_000; // 30 minutes
 
 export interface MapSelectorConfig {
-  /** How many frontier maps (beyond the birth seed) to guard */
+  /** How many frontier maps (beyond the start map) to guard */
   targetMaps: number;
   /** Relay URLs to query for heartbeat data */
   relays?: string[];
@@ -135,9 +132,6 @@ function analyzeHeartbeats(allEvents: unknown[]): MapNetworkState {
     const statusTag = tags.find(([name]) => name === 'status');
     if (statusTag?.[1] === 'offline') continue;
 
-    // Check if this server serves all maps
-    const servesAll = tags.some(([name, val]) => name === 'serves' && val === 'all');
-
     for (const tag of tags) {
       if (tag[0] !== 'map') continue;
       const mapId = parseInt(tag[1], 10);
@@ -148,39 +142,38 @@ function analyzeHeartbeats(allEvents: unknown[]): MapNetworkState {
       guardianCounts.set(mapId, (guardianCounts.get(mapId) ?? 0) + 1);
       playerCounts.set(mapId, (playerCounts.get(mapId) ?? 0) + (isNaN(players) ? 0 : players));
     }
-
-    // If serves all, mark all seed maps as guarded (they can serve them on demand)
-    if (servesAll) {
-      for (const seed of SEED_MAP_IDS) {
-        guardedMaps.add(seed);
-        guardianCounts.set(seed, (guardianCounts.get(seed) ?? 0) + 1);
-      }
-    }
   }
 
   return { guardedMaps, guardianCounts, playerCounts };
 }
 
+/** Center of the grid (50, 50) — used when network has no guardians yet */
+const CENTER_MAP_ID = toMapId(50, 50);
+
 /**
- * Choose a birth seed — the seed point with the fewest guardians.
- * Ties are broken randomly to avoid all lobsters choosing the same one.
+ * Choose a start map — the map with the fewest guardians in the network.
+ * If the network is empty, use the center map.
  */
-function chooseBirthSeed(state: MapNetworkState): number {
+function chooseStartMap(state: MapNetworkState): number {
+  if (state.guardedMaps.size === 0) {
+    return CENTER_MAP_ID;
+  }
+
   let minGuardians = Infinity;
   const candidates: number[] = [];
 
-  for (const seed of SEED_MAP_IDS) {
-    const count = state.guardianCounts.get(seed) ?? 0;
+  for (const mapId of state.guardedMaps) {
+    const count = state.guardianCounts.get(mapId) ?? 0;
     if (count < minGuardians) {
       minGuardians = count;
       candidates.length = 0;
-      candidates.push(seed);
+      candidates.push(mapId);
     } else if (count === minGuardians) {
-      candidates.push(seed);
+      candidates.push(mapId);
     }
   }
 
-  // Random tie-break
+  if (candidates.length === 0) return CENTER_MAP_ID;
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
@@ -209,23 +202,15 @@ function scoreFrontierMap(
   mapId: number,
   guardianCount: number,
   playerCount: number,
-  birthSeed: number,
+  startMap: number,
 ): number {
-  // Priority 1: Maps with no guardians get a big bonus
   const orphanBonus = guardianCount === 0 ? 500 : 0;
-
-  // Priority 2: Fewer existing guardians = higher score
   const scarcityScore = Math.max(0, 100 - guardianCount * 50);
-
-  // Priority 3: More players = higher demand
   const demandScore = Math.min(playerCount * 20, 100);
-
-  // Priority 4: Proximity to birth seed (Manhattan distance on grid)
-  const { x: bx, y: by } = { x: birthSeed % 100, y: Math.floor(birthSeed / 100) };
+  const { x: bx, y: by } = { x: startMap % 100, y: Math.floor(startMap / 100) };
   const { x: mx, y: my } = { x: mapId % 100, y: Math.floor(mapId / 100) };
   const distance = Math.abs(bx - mx) + Math.abs(by - my);
   const proximityScore = Math.max(0, 50 - distance);
-
   return orphanBonus + scarcityScore + demandScore + proximityScore;
 }
 
@@ -278,43 +263,36 @@ export class MapSelector {
       }
     }
 
-    // Analyze the network
     const state = analyzeHeartbeats(allEvents);
 
-    // 1. Choose birth seed
-    const birthSeed = chooseBirthSeed(state);
-    console.log(`[Guardian] Birth seed: map ${birthSeed} (guardians: ${state.guardianCounts.get(birthSeed) ?? 0})`);
+    const startMap = chooseStartMap(state);
+    console.log(`[Guardian] Start map: ${startMap} (guardians: ${state.guardianCounts.get(startMap) ?? 0})`);
 
-    // 2. Build the full guarded set (network + seeds)
     const guardedSet = new Set(state.guardedMaps);
-    for (const seed of SEED_MAP_IDS) {
-      guardedSet.add(seed);
+    if (guardedSet.size === 0) {
+      guardedSet.add(startMap);
     }
 
-    // 3. Compute frontier (adjacent unguarded maps)
     const frontier = computeFrontier(guardedSet);
 
-    // 4. Score and select frontier maps
     const scored = frontier.map((mapId) => ({
       mapId,
       score: scoreFrontierMap(
         mapId,
         state.guardianCounts.get(mapId) ?? 0,
         state.playerCounts.get(mapId) ?? 0,
-        birthSeed,
+        startMap,
       ),
     }));
 
     scored.sort((a, b) => b.score - a.score);
     const selectedFrontier = scored.slice(0, this.config.targetMaps).map((s) => s.mapId);
 
-    // 5. Final map list = birth seed + frontier
-    const finalMaps = [birthSeed, ...selectedFrontier];
+    const finalMaps = [startMap, ...selectedFrontier];
 
-    // Update the room manager
     this.roomManager.updateServedMaps(finalMaps);
 
-    console.log(`[Guardian] Now guarding ${finalMaps.length} maps: seed ${birthSeed} + ${selectedFrontier.length} frontier`);
+    console.log(`[Guardian] Now guarding ${finalMaps.length} maps: start ${startMap} + ${selectedFrontier.length} frontier`);
     if (selectedFrontier.length > 0) {
       console.log(`[Guardian]   Frontier maps: ${selectedFrontier.join(', ')}`);
     }

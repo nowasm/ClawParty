@@ -26,8 +26,6 @@ interface LineSelectorProps {
   totalGuardians: number;
   /** Whether the map is unguarded */
   isUnguarded: boolean;
-  /** Whether it's a seed map */
-  isSeed: boolean;
   /** Whether data is loading */
   isLoading: boolean;
   /** Callback when user selects a line */
@@ -41,23 +39,13 @@ export function LineSelector({
   currentLine,
   totalGuardians,
   isUnguarded,
-  isSeed,
   isLoading,
   onSelectLine,
   connectionState,
 }: LineSelectorProps) {
   const [open, setOpen] = useState(false);
 
-  // Unguarded state
   if (isUnguarded && !isLoading) {
-    if (isSeed) {
-      return (
-        <Badge variant="secondary" className="gap-1.5 h-7 text-xs">
-          <WifiOff className="h-3 w-3" />
-          Offline Mode
-        </Badge>
-      );
-    }
     return (
       <Badge variant="destructive" className="gap-1.5 h-7 text-xs">
         <WifiOff className="h-3 w-3" />

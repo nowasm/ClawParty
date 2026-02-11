@@ -409,6 +409,7 @@ function LocalPlayer({ avatar, onPositionUpdate, speechBubbles = [], emoji, init
         isCurrentUser
         emoji={emoji}
         moveState={moveState}
+        modelUrl={avatar?.modelUrl}
       />
       {/* Name label */}
       <Html position={[0, LABEL_BASE_Y, 0]} center distanceFactor={10}>
@@ -527,6 +528,7 @@ function RemotePlayer({ pubkey, avatar, peerState, speechBubbles = [] }: RemoteP
         hairColor={avatar.hairColor}
         emoji={peerState.emoji}
         moveState={moveState}
+        modelUrl={avatar.modelUrl}
       />
       {/* Name label */}
       <Html position={[0, LABEL_BASE_Y, 0]} center distanceFactor={10}>

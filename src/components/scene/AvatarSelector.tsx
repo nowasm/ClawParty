@@ -1,7 +1,7 @@
-import { useState, useEffect, Suspense, useCallback } from 'react';
+import { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
-import { Loader2, Save, RotateCcw, Palette, User, Sparkles } from 'lucide-react';
+import { Loader2, Save, RotateCcw, Palette, User, Sparkles, Upload, X, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,10 +12,13 @@ import {
   getAvatarPreset,
   type AvatarConfig,
   type AvatarPreset,
+  type AAICValidationResult,
 } from '@/lib/scene';
 import { useAvatar, usePublishAvatar } from '@/hooks/useAvatar';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useUploadFile } from '@/hooks/useUploadFile';
 import { useToast } from '@/hooks/useToast';
+import { validateAvatarModel, quickValidateFileSize } from '@/lib/avatarValidator';
 
 // ======================================================================
 // Curated outfit color palette
@@ -35,9 +38,11 @@ const COLOR_PALETTE = [
 function TurntablePreview({
   preset,
   color,
+  modelUrl,
 }: {
   preset: AvatarPreset;
   color: string;
+  modelUrl?: string;
 }) {
   return (
     <>
@@ -50,6 +55,7 @@ function TurntablePreview({
           preset={preset}
           color={color}
           animate
+          modelUrl={modelUrl}
         />
 
         {/* Pedestal */}
@@ -93,12 +99,19 @@ export function AvatarSelector() {
   const { user } = useCurrentUser();
   const { data: currentAvatar } = useAvatar(user?.pubkey);
   const { publishAvatar, isPending } = usePublishAvatar();
+  const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedModel, setSelectedModel] = useState(AVATAR_PRESETS[0].id);
   const [customColor, setCustomColor] = useState(AVATAR_PRESETS[0].color);
   const [displayName, setDisplayName] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Custom GLB model state
+  const [customModelUrl, setCustomModelUrl] = useState<string | undefined>(undefined);
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<AAICValidationResult | null>(null);
 
   // Sync initial state from loaded avatar data
   useEffect(() => {
@@ -106,6 +119,7 @@ export function AvatarSelector() {
       setSelectedModel(currentAvatar.model);
       setCustomColor(currentAvatar.color);
       setDisplayName(currentAvatar.displayName);
+      setCustomModelUrl(currentAvatar.modelUrl);
     }
   }, [currentAvatar]);
 
@@ -114,6 +128,8 @@ export function AvatarSelector() {
   const handlePresetSelect = useCallback((preset: AvatarPreset) => {
     setSelectedModel(preset.id);
     setCustomColor(preset.color);
+    setCustomModelUrl(undefined);
+    setValidationResult(null);
     setHasChanges(true);
   }, []);
 
@@ -122,16 +138,72 @@ export function AvatarSelector() {
     setHasChanges(true);
   }, []);
 
+  const handleRemoveCustomModel = useCallback(() => {
+    setCustomModelUrl(undefined);
+    setValidationResult(null);
+    setHasChanges(true);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Quick size / format check
+    const quickCheck = quickValidateFileSize(file);
+    if (!quickCheck.valid) {
+      toast({ title: 'Invalid file', description: quickCheck.error, variant: 'destructive' });
+      return;
+    }
+
+    // Full AAIC validation
+    setIsValidating(true);
+    setValidationResult(null);
+    try {
+      const result = await validateAvatarModel(file);
+      setValidationResult(result);
+
+      if (!result.valid) {
+        toast({
+          title: 'Model validation failed',
+          description: result.errors[0] ?? 'Model does not meet requirements.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Upload to Blossom
+      const [[, url]] = await uploadFile(file);
+      setCustomModelUrl(url);
+      setHasChanges(true);
+      toast({ title: 'Model uploaded!', description: 'Your custom avatar is ready.' });
+    } catch (err) {
+      console.error('Model upload failed:', err);
+      toast({
+        title: 'Upload failed',
+        description: err instanceof Error ? err.message : 'Could not upload model.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  }, [uploadFile, toast]);
+
   const handleReset = useCallback(() => {
     if (currentAvatar) {
       setSelectedModel(currentAvatar.model);
       setCustomColor(currentAvatar.color);
       setDisplayName(currentAvatar.displayName);
+      setCustomModelUrl(currentAvatar.modelUrl);
     } else {
       setSelectedModel(AVATAR_PRESETS[0].id);
       setCustomColor(AVATAR_PRESETS[0].color);
       setDisplayName('');
+      setCustomModelUrl(undefined);
     }
+    setValidationResult(null);
     setHasChanges(false);
   }, [currentAvatar]);
 
@@ -144,6 +216,7 @@ export function AvatarSelector() {
       hairStyle: 'none',
       hairColor: '#3d2914',
       displayName: displayName.trim(),
+      modelUrl: customModelUrl,
     };
 
     try {
@@ -211,6 +284,7 @@ export function AvatarSelector() {
               <TurntablePreview
                 preset={selectedPreset}
                 color={customColor}
+                modelUrl={customModelUrl}
               />
             </Canvas>
           </Suspense>
@@ -310,6 +384,91 @@ export function AvatarSelector() {
                 className="flex-1 font-mono text-sm h-8"
               />
             </div>
+          </div>
+
+          {/* Custom 3D Model Upload */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold flex items-center gap-1.5">
+              <Upload className="h-3.5 w-3.5" />
+              Custom 3D Model (GLB)
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Upload a custom GLB avatar with humanoid rig and standard animations (idle, walk, run, wave, laugh, angry, think, talk).
+              Max 20k triangles, 5 MB.
+            </p>
+
+            {customModelUrl ? (
+              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-green-500/30 bg-green-500/5">
+                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                <span className="text-xs text-green-700 dark:text-green-400 truncate flex-1">
+                  Custom model active
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={handleRemoveCustomModel}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".glb,.gltf"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  disabled={isValidating || isUploading}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={isValidating || isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {isValidating ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Validating...
+                    </>
+                  ) : isUploading ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-3.5 w-3.5" />
+                      Upload GLB Model
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Validation result details */}
+            {validationResult && !validationResult.valid && (
+              <div className="p-2.5 rounded-lg border border-destructive/30 bg-destructive/5 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Validation Failed
+                </div>
+                {validationResult.errors.map((err, i) => (
+                  <p key={i} className="text-xs text-destructive/80 pl-5">{err}</p>
+                ))}
+              </div>
+            )}
+
+            {validationResult && validationResult.warnings.length > 0 && (
+              <div className="p-2.5 rounded-lg border border-yellow-500/30 bg-yellow-500/5 space-y-1">
+                {validationResult.warnings.map((warn, i) => (
+                  <p key={i} className="text-xs text-yellow-700 dark:text-yellow-400">{warn}</p>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

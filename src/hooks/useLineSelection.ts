@@ -8,7 +8,6 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useMapSyncServers, type SyncServerInfo } from '@/hooks/useMapSyncServers';
-import { isSeedMap } from '@/lib/mapRegistry';
 
 /** Max number of lines shown to the player */
 const MAX_LINES = 3;
@@ -45,8 +44,6 @@ export interface UseLineSelectionReturn {
   selectLine: (id: string) => void;
   /** Whether the map has no guardians at all */
   isUnguarded: boolean;
-  /** Whether this is a seed map (enterable even without guardians) */
-  isSeed: boolean;
   /** Whether data is loading */
   isLoading: boolean;
   /** Whether the primary line is overloaded (hint to switch) */
@@ -72,8 +69,6 @@ export function useLineSelection(mapId: number | undefined): UseLineSelectionRet
     mapId,
     enabled: mapId !== undefined,
   });
-
-  const isSeed = mapId !== undefined ? isSeedMap(mapId) : false;
 
   // Convert servers to lines, take top 3
   const lines = useMemo(() => {
@@ -118,7 +113,6 @@ export function useLineSelection(mapId: number | undefined): UseLineSelectionRet
     currentLine,
     selectLine,
     isUnguarded: !isLoading && servers.length === 0,
-    isSeed,
     isLoading,
     isPrimaryOverloaded,
   };

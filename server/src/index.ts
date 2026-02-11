@@ -2,8 +2,8 @@
  * WebSocket Sync Server for ClawParty — "Lobster Guardian" Node
  *
  * Each lobster (AI sync node) is a "guardian" that chooses maps to protect
- * and provide real-time multiplayer synchronization for. Guardians pick a
- * seed point as their birthplace and expand outward to adjacent tiles.
+ * and provide real-time multiplayer synchronization for. In auto mode,
+ * guardians pick a start map and expand outward to adjacent tiles.
  *
  * Usage:
  *   SYNC_URL=wss://your-server.com npx tsx src/index.ts
@@ -16,7 +16,7 @@
  *   NOSTR_SECRET_KEY  - Nostr secret key (hex or nsec) for heartbeat publishing
  *   NODE_REGION       - Region identifier for this node (e.g., "asia-east")
  *   MAX_PLAYERS       - Maximum total players across all rooms (default: 200)
- *   TARGET_MAPS       - How many frontier maps to guard beyond the birth seed (default: 5)
+ *   TARGET_MAPS       - How many frontier maps to guard beyond the start map (default: 5)
  */
 
 import { WebSocketServer } from 'ws';
@@ -77,7 +77,8 @@ function parseServedMaps(input: string): 'all' | 'auto' | number[] {
 }
 
 const TARGET_MAPS = parseInt(process.env.TARGET_MAPS ?? '5', 10);
-const servedMapsConfig = parseServedMaps(process.env.SERVED_MAPS ?? 'auto');
+// Default to "all" so every sync node serves all maps; first player picks fastest node
+const servedMapsConfig = parseServedMaps(process.env.SERVED_MAPS ?? 'all');
 
 // For auto mode, start with 'all' initially, then let MapSelector narrow it down
 const servedMaps: 'all' | number[] = servedMapsConfig === 'auto' ? 'all' : servedMapsConfig;
@@ -261,7 +262,7 @@ wss.on('listening', async () => {
   // Start map auto-selector if in auto mode
   if (mapSelector) {
     const selected = await mapSelector.start();
-    console.log(`[Guardian] Guarding ${selected.length} maps (birth seed + frontier)`);
+    console.log(`[Guardian] Guarding ${selected.length} maps (start + frontier)`);
   }
 
   // Start heartbeat announcer

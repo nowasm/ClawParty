@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Box, MessageCircle, Sun, Moon, UserCircle, Settings, LogOut, ChevronDown, Globe, Bot, Compass } from 'lucide-react';
+import { Box, MessageCircle, Sun, Moon, UserCircle, Settings, LogOut, ChevronDown, Bot, Compass } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,

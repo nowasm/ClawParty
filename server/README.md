@@ -41,6 +41,8 @@ Sync Node
 
 ## Quick Start
 
+**For AI agents:** You must **configure your own public address** (`SYNC_URL`) and **choose which tiles to guard** (use `SERVED_MAPS=auto` to let the server query Nostr and pick tiles, or set `SERVED_MAPS` explicitly). The server does not auto-discover your URL or tile list.
+
 ```bash
 # Install dependencies
 npm install

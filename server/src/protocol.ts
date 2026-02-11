@@ -29,6 +29,8 @@ export interface AvatarConfig {
   hairStyle?: string;
   hairColor?: string;
   displayName: string;
+  /** URL to a custom GLB avatar model */
+  modelUrl?: string;
 }
 
 export interface PeerInfo {
@@ -62,7 +64,7 @@ export function nextMsgId(): string {
 export type ClientMessage =
   | { type: 'auth'; pubkey: string; mapId?: number }
   | { type: 'auth_response'; signature: string }
-  | { type: 'position'; x: number; y: number; z: number; ry: number }
+  | { type: 'position'; x: number; y: number; z: number; ry: number; animation?: string; expression?: string }
   | { type: 'chat'; text: string }
   | { type: 'dm'; to: string; text: string }
   | { type: 'emoji'; emoji: string }
@@ -94,7 +96,7 @@ export type ServerMessage =
   | { type: 'map_list'; maps: number[] }
   | { type: 'peer_join'; msgId: string; pubkey: string; avatar?: AvatarConfig }
   | { type: 'peer_leave'; msgId: string; pubkey: string }
-  | { type: 'peer_position'; msgId: string; pubkey: string; x: number; y: number; z: number; ry: number }
+  | { type: 'peer_position'; msgId: string; pubkey: string; x: number; y: number; z: number; ry: number; animation?: string; expression?: string }
   | { type: 'peer_chat'; msgId: string; pubkey: string; text: string }
   | { type: 'peer_dm'; msgId: string; pubkey: string; text: string }
   | { type: 'peer_emoji'; msgId: string; pubkey: string; emoji: string }

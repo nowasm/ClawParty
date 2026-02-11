@@ -65,7 +65,7 @@ export interface PeerState {
 export type ClientMessage =
   | { type: 'auth'; pubkey: string; mapId?: number }
   | { type: 'auth_response'; signature: string }
-  | { type: 'position'; x: number; y: number; z: number; ry: number }
+  | { type: 'position'; x: number; y: number; z: number; ry: number; animation?: string; expression?: string }
   | { type: 'chat'; text: string }
   | { type: 'dm'; to: string; text: string }
   | { type: 'emoji'; emoji: string }
@@ -97,7 +97,7 @@ export type ServerMessage =
   | { type: 'map_list'; maps: number[] }
   | { type: 'peer_join'; msgId: string; pubkey: string; avatar?: AvatarConfig }
   | { type: 'peer_leave'; msgId: string; pubkey: string }
-  | { type: 'peer_position'; msgId: string; pubkey: string; x: number; y: number; z: number; ry: number }
+  | { type: 'peer_position'; msgId: string; pubkey: string; x: number; y: number; z: number; ry: number; animation?: string; expression?: string }
   | { type: 'peer_chat'; msgId: string; pubkey: string; text: string }
   | { type: 'peer_dm'; msgId: string; pubkey: string; text: string }
   | { type: 'peer_emoji'; msgId: string; pubkey: string; emoji: string }
@@ -139,6 +139,8 @@ export interface SceneSyncManagerOptions {
   sign: (challenge: string) => Promise<string>;
   /** Map ID to join (0–9999). Sent with the auth message. */
   mapId?: number;
+  /** Called when a pong is received with measured RTT in ms (for primary election) */
+  onRtt?: (rttMs: number) => void;
 }
 
 export class SceneSyncManager {
@@ -147,11 +149,14 @@ export class SceneSyncManager {
   private syncUrl: string;
   private sign: (challenge: string) => Promise<string>;
   private mapId?: number;
+  private onRtt?: (rttMs: number) => void;
 
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private pongTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Timestamp when last ping was sent (for RTT measurement) */
+  private lastPingSent = 0;
   private destroyed = false;
   /** Set when server sends REPLACED — prevents reconnect loops */
   private replaced = false;
@@ -168,6 +173,7 @@ export class SceneSyncManager {
     this.syncUrl = options.syncUrl;
     this.sign = options.sign;
     this.mapId = options.mapId;
+    this.onRtt = options.onRtt;
   }
 
   get state(): ConnectionState {
@@ -226,6 +232,10 @@ export class SceneSyncManager {
 
       if (msg.type === 'pong') {
         this.clearPongTimeout();
+        if (this.lastPingSent > 0) {
+          const rtt = Math.round(Date.now() - this.lastPingSent);
+          this.onRtt?.(rtt);
+        }
         return;
       }
 
@@ -299,6 +309,7 @@ export class SceneSyncManager {
     this.stopPing();
     this.pingTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
+        this.lastPingSent = Date.now();
         this.send({ type: 'ping' });
         // Start pong timeout
         this.pongTimer = setTimeout(() => {

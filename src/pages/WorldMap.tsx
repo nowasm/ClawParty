@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import {
   Globe, Users, ZoomIn, ZoomOut, Maximize2,
-  Flame, Clock, ArrowRight, Map as MapIcon, Crown, Shield, Lock,
+  Flame, ArrowRight, Map as MapIcon, Crown, Shield,
 } from 'lucide-react';
 import { SiteHeader } from '@/components/scene/SiteHeader';
 import { Button } from '@/components/ui/button';
@@ -14,11 +14,11 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
-  GRID_COLS, GRID_ROWS, SEED_MAP_IDS,
-  toMapId, toMapCoords, getDefaultPreset, isSeedMap,
+  GRID_COLS, GRID_ROWS,
+  toMapId, toMapCoords, getDefaultPreset,
 } from '@/lib/mapRegistry';
 import { useGuardedMaps, type GuardedMapInfo } from '@/hooks/useGuardedMaps';
-import { getSeedPreset } from '@/lib/scene';
+import { getPresetByMapId } from '@/lib/scene';
 
 // ============================================================================
 // Types
@@ -33,7 +33,6 @@ interface RankedMap {
   guardianCount: number;
   playerCount: number;
   rank: number;
-  isSeed: boolean;
 }
 
 // ============================================================================
@@ -71,23 +70,13 @@ const PRESET_COLORS: Record<string, { bg: string; border: string; label: string;
 // Time-ago helper
 // ============================================================================
 
-function timeAgo(timestamp: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = now - timestamp;
-  if (diff < 60) return 'just now';
-  if (diff < 120) return '1 min ago';
-  if (diff < 3600) return `${Math.floor(diff / 60)} mins ago`;
-  if (diff < 7200) return '1 hour ago';
-  return `${Math.floor(diff / 3600)} hours ago`;
-}
-
 // ============================================================================
 // MapRankCard — card for ranked maps
 // ============================================================================
 
 function MapRankCard({
   map,
-  mode,
+  mode: _mode,
   onClick,
 }: {
   map: RankedMap;
@@ -97,7 +86,7 @@ function MapRankCard({
   const presetStyle = PRESET_COLORS[map.preset] ?? PRESET_COLORS[''];
   const isTop3 = map.rank <= 3;
   const medalColors = ['', 'text-yellow-500', 'text-slate-400', 'text-amber-700'];
-  const seedPreset = getSeedPreset(map.mapId);
+  const mapPreset = getPresetByMapId(map.mapId);
 
   return (
     <button
@@ -124,13 +113,8 @@ function MapRankCard({
         <div className="flex-1 min-w-0 space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm truncate">
-              {seedPreset ? seedPreset.title : `Map #${map.mapId}`}
+              {mapPreset ? mapPreset.title : `Map #${map.mapId}`}
             </span>
-            {map.isSeed && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                Seed
-              </Badge>
-            )}
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <MapIcon className="h-3 w-3" />
@@ -183,7 +167,7 @@ const ZOOM_LEVELS = [10, 20, 50, 100];
 
 const WorldMap = () => {
   const navigate = useNavigate();
-  const [zoomIndex, setZoomIndex] = useState(1);
+  const [zoomIndex, setZoomIndex] = useState(3);
   const [viewOffset, setViewOffset] = useState({ x: 50, y: 50 });
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredCell, setHoveredCell] = useState<number | null>(null);
@@ -196,7 +180,7 @@ const WorldMap = () => {
   const visibleCells = ZOOM_LEVELS[zoomIndex];
 
   // Build ranked lists from guarded maps
-  const { hotMaps, recentMaps, totalGuardians, totalPlayers, guardedCount } = useMemo(() => {
+  const { hotMaps, recentMaps, totalPlayers, guardedCount } = useMemo(() => {
     const allGuarded = Array.from(guardedMaps.values());
 
     const hot: RankedMap[] = [...allGuarded]
@@ -209,11 +193,9 @@ const WorldMap = () => {
           ...m, ...coords,
           preset: getDefaultPreset(m.mapId),
           rank: i + 1,
-          isSeed: isSeedMap(m.mapId),
         };
       });
 
-    // For recent, we don't have timestamps per-map, so use guardian count as proxy
     const recent: RankedMap[] = [...allGuarded]
       .sort((a, b) => b.guardianCount - a.guardianCount || b.playerCount - a.playerCount)
       .slice(0, 12)
@@ -223,22 +205,17 @@ const WorldMap = () => {
           ...m, ...coords,
           preset: getDefaultPreset(m.mapId),
           rank: i + 1,
-          isSeed: isSeedMap(m.mapId),
         };
       });
 
-    // Count unique guardians (deduplicated by guardedMaps already)
-    let tGuardians = 0;
     let tPlayers = 0;
     for (const m of allGuarded) {
-      tGuardians = Math.max(tGuardians, m.guardianCount); // approximate
       tPlayers += m.playerCount;
     }
 
     return {
       hotMaps: hot,
       recentMaps: recent,
-      totalGuardians: allGuarded.reduce((max, m) => Math.max(max, m.guardianCount), 0),
       totalPlayers: tPlayers,
       guardedCount: guardedSet.size,
     };
@@ -257,31 +234,41 @@ const WorldMap = () => {
     return { startX, startY, endX, endY };
   }, [viewOffset, visibleCells]);
 
-  // Generate visible cells
+  // Heat (player count) per map for coloring; 0 = gray, >0 = colored by preset + intensity
+  const heatByMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const [mapId, info] of guardedMaps) {
+      map.set(mapId, info.playerCount);
+    }
+    return map;
+  }, [guardedMaps]);
+
+  // Generate visible cells (all tiles enterable; color by heat)
   const cells = useMemo(() => {
     const result: {
       mapId: number; x: number; y: number; preset: string;
-      info?: GuardedMapInfo; isSeed: boolean; enterable: boolean;
+      info?: GuardedMapInfo; enterable: boolean; heat: number;
     }[] = [];
     for (let y = viewRange.startY; y < viewRange.endY; y++) {
       for (let x = viewRange.startX; x < viewRange.endX; x++) {
         const mapId = toMapId(x, y);
+        const heat = heatByMap.get(mapId) ?? 0;
         result.push({
           mapId, x, y,
           preset: getDefaultPreset(mapId),
           info: guardedMaps.get(mapId),
-          isSeed: isSeedMap(mapId),
           enterable: isEnterable(mapId),
+          heat,
         });
       }
     }
     return result;
-  }, [viewRange, guardedMaps, isEnterable]);
+  }, [viewRange, guardedMaps, heatByMap, isEnterable]);
 
   const zoomIn = useCallback(() => setZoomIndex((p) => Math.max(0, p - 1)), []);
   const zoomOut = useCallback(() => setZoomIndex((p) => Math.min(ZOOM_LEVELS.length - 1, p + 1)), []);
   const resetView = useCallback(() => {
-    setZoomIndex(1);
+    setZoomIndex(3);
     setViewOffset({ x: 50, y: 50 });
   }, []);
 
@@ -363,8 +350,7 @@ const WorldMap = () => {
               Lobster World
             </h1>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              10,000 tiles guarded by lobsters. Green tiles are protected and ready to explore.
-              Gray tiles await their guardian.
+              10,000 tiles, all enterable. Color shows heat (player count); gray = empty, colored = active.
             </p>
 
             <div className="flex items-center justify-center gap-3 md:gap-4 pt-2 flex-wrap">
@@ -454,11 +440,10 @@ const WorldMap = () => {
                 {hoveredInfo && (
                   <span className="ml-3 text-foreground font-medium">
                     Map #{hoveredInfo.mapId} ({hoveredInfo.x}, {hoveredInfo.y})
-                    {hoveredInfo.isSeed && ' [Seed]'}
                     {hoveredInfo.info && (
                       <> &middot; {hoveredInfo.info.guardianCount} guardian{hoveredInfo.info.guardianCount !== 1 ? 's' : ''} &middot; {hoveredInfo.info.playerCount} players</>
                     )}
-                    {!hoveredInfo.enterable && ' (locked)'}
+                    {hoveredInfo.heat === 0 && ' &middot; 0 players'}
                   </span>
                 )}
               </div>
@@ -512,35 +497,31 @@ const WorldMap = () => {
                     {cells.map((cell) => {
                       const presetStyle = PRESET_COLORS[cell.preset] ?? PRESET_COLORS[''];
                       const isGuarded = !!cell.info && cell.info.guardianCount > 0;
-                      const isGreen = cell.enterable;
+                      const hasHeat = cell.heat > 0; // 0 players = gray, any players = preset color by heat
 
                       return (
                         <button
                           key={cell.mapId}
                           className={cn(
                             'relative rounded-[2px] transition-all duration-150',
-                            // Green (guarded/seed) vs Gray (unguarded)
-                            isGreen
+                            hasHeat
                               ? cn(
                                   presetStyle.bg,
                                   'hover:ring-2 hover:ring-primary hover:z-10 hover:scale-110',
                                   isGuarded && 'ring-1',
                                   isGuarded && presetStyle.border,
-                                  cell.isSeed && !isGuarded && 'ring-1 ring-dashed ring-primary/30',
                                 )
                               : cn(
                                   'bg-muted/30 dark:bg-muted/20',
-                                  'cursor-not-allowed opacity-60',
+                                  'hover:ring-2 hover:ring-primary/50 hover:z-10 hover:scale-105',
                                 ),
-                            hoveredCell === cell.mapId && isGreen && 'ring-2 ring-primary z-10',
+                            hoveredCell === cell.mapId && 'ring-2 ring-primary z-10',
                           )}
                           onClick={() => handleCellClick(cell.mapId, cell.enterable)}
                           onMouseEnter={() => setHoveredCell(cell.mapId)}
                           onMouseLeave={() => setHoveredCell(null)}
                           title={
-                            isGreen
-                              ? `${cell.isSeed ? '[Seed] ' : ''}Map #${cell.mapId} (${cell.x}, ${cell.y}) - ${presetStyle.label}${cell.info ? ` · ${cell.info.guardianCount} guardians · ${cell.info.playerCount} players` : ''}`
-                              : `Map #${cell.mapId} (${cell.x}, ${cell.y}) - Awaiting guardian`
+                            `Map #${cell.mapId} (${cell.x}, ${cell.y}) - ${presetStyle.label}${cell.info ? ` · ${cell.info.guardianCount} guardians · ${cell.info.playerCount} players` : ' · 0 players'}`
                           }
                         >
                           {/* Player indicator */}
@@ -555,23 +536,12 @@ const WorldMap = () => {
                               <div className="w-1 h-1 bg-emerald-500 rounded-full" />
                             </div>
                           )}
-                          {/* Seed indicator */}
-                          {cell.isSeed && visibleCells <= 20 && (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/60 rounded-full" />
-                          )}
                           {/* Cell label at highest zoom */}
                           {visibleCells <= 10 && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center text-[9px] text-muted-foreground/70">
-                              {cell.isSeed ? (
-                                <span className="text-primary font-bold text-[8px]">SEED</span>
-                              ) : (
-                                <span>{cell.x},{cell.y}</span>
-                              )}
-                              {cell.info && cell.info.playerCount > 0 && (
-                                <span className="text-primary font-medium">{cell.info.playerCount}p</span>
-                              )}
-                              {!isGreen && (
-                                <Lock className="h-2 w-2 text-muted-foreground/40" />
+                              <span>{cell.x},{cell.y}</span>
+                              {cell.heat > 0 && (
+                                <span className="text-primary font-medium">{cell.heat}p</span>
                               )}
                             </div>
                           )}
@@ -588,15 +558,11 @@ const WorldMap = () => {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-sm bg-green-500/40 border border-green-500/50" />
-              <span>Guarded (enterable)</span>
+              <span>Has players (heat)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-sm bg-muted/30 border border-muted" />
-              <span>Unguarded (locked)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm bg-primary/20 border-b-2 border-primary/60" />
-              <span>Seed point</span>
+              <span>Empty (0 players)</span>
             </div>
             <span className="mx-1">|</span>
             <div className="flex items-center gap-1.5">

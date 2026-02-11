@@ -81,42 +81,6 @@ export function getDefaultPreset(mapId: number): string {
   return presets[hash];
 }
 
-// ============================================================================
-// Seed Points — the 6 starting locations in the world
-// ============================================================================
-
-/**
- * Seed map IDs — the 6 starting locations from which lobster guardians
- * expand outward. These always appear as "green" (enterable) on the world map.
- *
- * Layout on the 100x100 grid:
- *
- *            (50, 15)
- *            Night City
- *
- *  (20, 35)              (80, 35)
- *  Green Plains          Desert Dunes
- *
- *            (50, 50)
- *            Snow Field
- *
- *  (20, 65)              (80, 65)
- *  Ocean Platform        Lava Rocks
- */
-export const SEED_MAP_IDS: number[] = [
-  toMapId(20, 35),  // 3520 — Green Plains
-  toMapId(80, 35),  // 3580 — Desert Dunes
-  toMapId(50, 50),  // 5050 — Snow Field
-  toMapId(80, 65),  // 6580 — Lava Rocks
-  toMapId(20, 65),  // 6520 — Ocean Platform
-  toMapId(50, 15),  // 1550 — Night City
-];
-
-/** Check if a map ID is a seed point */
-export function isSeedMap(mapId: number): boolean {
-  return SEED_MAP_IDS.includes(mapId);
-}
-
 /**
  * Get 8-directional neighbor map IDs for a given map.
  * Returns only valid map IDs (within the 100x100 grid).

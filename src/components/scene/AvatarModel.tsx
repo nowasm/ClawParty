@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect, useState } from 'react';
+import { useRef, useMemo, useEffect, useState, Suspense } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
@@ -7,6 +7,7 @@ import {
   type ActionType,
   EMOJI_ACTIONS,
 } from '@/lib/scene';
+import { GLBAvatarModel } from './GLBAvatarModel';
 
 // ======================================================================
 // Constants
@@ -32,7 +33,7 @@ const ACTION_DURATION = 2.5;
 // Types
 // ======================================================================
 
-interface AvatarModelProps {
+export interface AvatarModelProps {
   preset: AvatarPreset;
   color: string;
   /** @deprecated Kept for backward compat — not rendered for lobster avatars */
@@ -46,6 +47,8 @@ interface AvatarModelProps {
   emoji?: string | null;
   /** Movement state: idle = idle anim, walk = walk cycle, run = run cycle */
   moveState?: 'idle' | 'walk' | 'run';
+  /** URL to a custom GLB avatar model. When set, renders GLB instead of lobster. */
+  modelUrl?: string;
 }
 
 // ======================================================================
@@ -326,13 +329,41 @@ function LobsterTail({ shellColor }: { shellColor: string }) {
 // Main Avatar Component (Cute Lobster Character)
 // ======================================================================
 
-export function AvatarModel({
+/**
+ * Smart avatar component that renders either a custom GLB model or
+ * the built-in procedural lobster avatar as fallback.
+ */
+export function AvatarModel(props: AvatarModelProps) {
+  const { modelUrl, ...rest } = props;
+
+  // If a custom GLB URL is provided, use the GLB renderer with lobster fallback on error
+  if (modelUrl) {
+    return (
+      <Suspense fallback={<LobsterAvatar {...rest} />}>
+        <GLBAvatarModel
+          modelUrl={modelUrl}
+          color={rest.color}
+          isCurrentUser={rest.isCurrentUser}
+          animate={rest.animate}
+          emoji={rest.emoji}
+          moveState={rest.moveState}
+        />
+      </Suspense>
+    );
+  }
+
+  // Default: procedural lobster avatar
+  return <LobsterAvatar {...rest} />;
+}
+
+/** The original procedural lobster avatar (fallback when no custom GLB) */
+function LobsterAvatar({
   color,
   isCurrentUser = false,
   animate = true,
   emoji,
   moveState = 'idle',
-}: AvatarModelProps) {
+}: Omit<AvatarModelProps, 'modelUrl'>) {
   const groupRef = useRef<THREE.Group>(null!);
   const headRef = useRef<THREE.Group>(null!);
   const leftArmRef = useRef<THREE.Group>(null!);

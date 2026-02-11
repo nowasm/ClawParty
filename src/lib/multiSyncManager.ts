@@ -253,7 +253,16 @@ export class MultiSyncManager {
   // --------------------------------------------------------------------------
 
   private addServer(url: string, pubkey: string, sign: (challenge: string) => Promise<string>, mapId?: number): void {
-    const opts: SceneSyncManagerOptions = { syncUrl: url, pubkey, sign, mapId };
+    const opts: SceneSyncManagerOptions = {
+      syncUrl: url,
+      pubkey,
+      sign,
+      mapId,
+      onRtt: (rttMs) => {
+        this.updateRtt(url, rttMs);
+        this.electPrimary();
+      },
+    };
     const manager = new SceneSyncManager(opts);
 
     const conn: ServerConnection = {

@@ -231,7 +231,7 @@ export class Room {
         client.position = { x: msg.x, y: msg.y, z: msg.z, ry: msg.ry };
         client.cell = cellFromPosition(msg.x, msg.z);
         // Only send position updates to clients subscribed to this cell
-        this.broadcastToSubscribers(ws, client.cell, {
+        const posMsg: ServerMessage = {
           type: 'peer_position',
           msgId: nextMsgId(),
           pubkey: client.pubkey,
@@ -239,7 +239,11 @@ export class Room {
           y: msg.y,
           z: msg.z,
           ry: msg.ry,
-        });
+        };
+        // Forward optional animation/expression state
+        if (msg.animation) (posMsg as Record<string, unknown>).animation = msg.animation;
+        if (msg.expression) (posMsg as Record<string, unknown>).expression = msg.expression;
+        this.broadcastToSubscribers(ws, client.cell, posMsg);
         break;
       }
 

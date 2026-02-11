@@ -3,13 +3,12 @@
  *
  * Queries Nostr for kind 20311 heartbeat events and aggregates
  * the set of all map IDs that have at least one active guardian.
- * Also includes the 6 seed maps (always considered "green"/enterable).
  */
 
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
-import { SEED_MAP_IDS } from '@/lib/mapRegistry';
+import { isValidMapId } from '@/lib/mapRegistry';
 
 /** Info about a guarded map */
 export interface GuardedMapInfo {
@@ -45,9 +44,6 @@ function parseHeartbeats(events: NostrEvent[]): Map<number, GuardedMapInfo> {
     const statusTag = event.tags.find(([t]) => t === 'status');
     if (statusTag?.[1] === 'offline' || statusTag?.[1] === 'standby') continue;
 
-    // Check serves-all flag
-    const servesAll = event.tags.some(([t, v]) => t === 'serves' && v === 'all');
-
     for (const tag of event.tags) {
       if (tag[0] !== 'map') continue;
       const mapId = parseInt(tag[1], 10);
@@ -60,16 +56,6 @@ function parseHeartbeats(events: NostrEvent[]): Map<number, GuardedMapInfo> {
       mapInfo.set(mapId, existing);
     }
 
-    // If serves all, count this guardian for all seeds
-    if (servesAll) {
-      for (const seed of SEED_MAP_IDS) {
-        if (!mapInfo.has(seed)) {
-          mapInfo.set(seed, { mapId: seed, guardianCount: 0, playerCount: 0 });
-        }
-        const info = mapInfo.get(seed)!;
-        info.guardianCount += 1;
-      }
-    }
   }
 
   return mapInfo;
@@ -78,9 +64,9 @@ function parseHeartbeats(events: NostrEvent[]): Map<number, GuardedMapInfo> {
 interface UseGuardedMapsReturn {
   /** Map of mapId → GuardedMapInfo for all guarded maps */
   guardedMaps: Map<number, GuardedMapInfo>;
-  /** Set of all guarded map IDs (including seeds) */
+  /** Set of all guarded map IDs */
   guardedSet: Set<number>;
-  /** Whether a specific map is enterable (guarded or seed) */
+  /** Whether a specific map is enterable (all valid map IDs are enterable) */
   isEnterable: (mapId: number) => boolean;
   /** Whether the query is loading */
   isLoading: boolean;
@@ -90,7 +76,6 @@ interface UseGuardedMapsReturn {
 
 /**
  * Hook to discover which maps are currently guarded by lobsters.
- * Results include seed maps which are always enterable.
  */
 export function useGuardedMaps(): UseGuardedMapsReturn {
   const { nostr } = useNostr();
@@ -115,17 +100,11 @@ export function useGuardedMaps(): UseGuardedMapsReturn {
 
   const guardedMaps = query.data ?? new Map<number, GuardedMapInfo>();
 
-  // Build the full set including seeds
-  const guardedSet = new Set<number>();
-  for (const mapId of guardedMaps.keys()) {
-    guardedSet.add(mapId);
-  }
-  for (const seed of SEED_MAP_IDS) {
-    guardedSet.add(seed);
-  }
+  const guardedSet = new Set<number>(guardedMaps.keys());
 
+  // All map tiles are enterable; sync servers default to serving all maps
   const isEnterable = (mapId: number): boolean => {
-    return guardedSet.has(mapId);
+    return isValidMapId(mapId);
   };
 
   return {
