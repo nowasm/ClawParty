@@ -20,6 +20,7 @@ import {
 } from '@/lib/mapRegistry';
 import { useGuardedMaps, type GuardedMapInfo } from '@/hooks/useGuardedMaps';
 import { useSyncServerList, type SyncServerNode } from '@/hooks/useSyncServerList';
+import { useSyncServerLatency } from '@/hooks/useSyncServerLatency';
 import { getPresetByMapId } from '@/lib/scene';
 
 // ============================================================================
@@ -174,7 +175,7 @@ function formatUptime(seconds: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-function SyncServerCard({ server }: { server: SyncServerNode }) {
+function SyncServerCard({ server, latency }: { server: SyncServerNode; latency?: number }) {
   const loadPercent = server.maxPlayers > 0
     ? Math.round((server.currentPlayers / server.maxPlayers) * 100)
     : 0;
@@ -259,6 +260,30 @@ function SyncServerCard({ server }: { server: SyncServerNode }) {
 
         {/* Stats row */}
         <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+          {/* Latency */}
+          <div
+            className="flex items-center gap-1"
+            title={latency === undefined ? 'Measuring latency…' : latency < 0 ? 'Unreachable' : `Latency: ${latency}ms`}
+          >
+            <Wifi className={cn(
+              'h-3 w-3',
+              latency === undefined ? 'text-muted-foreground animate-pulse'
+                : latency < 0 ? 'text-red-500'
+                : latency < 100 ? 'text-emerald-500'
+                : latency < 250 ? 'text-amber-500'
+                : 'text-red-500',
+            )} />
+            <span className={cn(
+              'font-medium tabular-nums',
+              latency === undefined ? 'text-muted-foreground'
+                : latency < 0 ? 'text-red-500'
+                : latency < 100 ? 'text-emerald-500'
+                : latency < 250 ? 'text-amber-500'
+                : 'text-red-500',
+            )}>
+              {latency === undefined ? '…' : latency < 0 ? 'N/A' : `${latency}ms`}
+            </span>
+          </div>
           <div className="flex items-center gap-1" title="Active rooms">
             <Activity className="h-3 w-3" />
             <span>{server.activeRooms} room{server.activeRooms !== 1 ? 's' : ''}</span>
@@ -328,6 +353,10 @@ const WorldMap = () => {
 
   const { guardedMaps, guardedSet, isEnterable, isLoading } = useGuardedMaps();
   const { servers: syncServers, isLoading: serversLoading } = useSyncServerList();
+
+  // Measure latency to each sync server
+  const syncServerUrls = useMemo(() => syncServers.map((s) => s.syncUrl), [syncServers]);
+  const latencyMap = useSyncServerLatency(syncServerUrls);
 
   const visibleCells = ZOOM_LEVELS[zoomIndex];
 
@@ -596,7 +625,11 @@ const WorldMap = () => {
           ) : syncServers.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {syncServers.map((server) => (
-                <SyncServerCard key={server.syncUrl} server={server} />
+                <SyncServerCard
+                  key={server.syncUrl}
+                  server={server}
+                  latency={latencyMap.get(server.syncUrl)}
+                />
               ))}
             </div>
           ) : (
