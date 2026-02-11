@@ -4,6 +4,8 @@ import prerender from "@prerenderer/rollup-plugin";
 import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vitest/config";
 
+const isVercel = !!process.env.VERCEL;
+
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
   server: {
@@ -12,7 +14,8 @@ export default defineConfig(() => ({
   },
   plugins: [
     react(),
-    prerender({
+    // Skip prerendering on Vercel — its build environment lacks Chrome system dependencies
+    !isVercel && prerender({
       routes: [
         "/",
         "/popular",
