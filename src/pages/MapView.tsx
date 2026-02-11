@@ -1,10 +1,9 @@
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { ArrowLeft, Users, MapPin, Shield, Lock } from 'lucide-react';
+import { ArrowLeft, Users, MapPin, Shield } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { SceneViewer } from '@/components/scene/SceneViewer';
 import { SceneChat } from '@/components/scene/SceneChat';
 import { EmojiBar } from '@/components/scene/EmojiBar';
@@ -46,11 +45,11 @@ const MapView = () => {
   } = useLineSelection(validMapId ? mapId : undefined);
 
   // Allow overriding sync URL via ?sync= query parameter (for local dev)
+  const syncOverride = searchParams.get('sync');
   const effectiveSyncUrl = useMemo(() => {
-    const overrideSync = searchParams.get('sync');
-    if (overrideSync) return overrideSync;
+    if (syncOverride) return syncOverride;
     return currentLine?.syncUrl ?? '';
-  }, [searchParams, currentLine]);
+  }, [syncOverride, currentLine]);
 
   const { data: currentUserAvatar } = useAvatar(user?.pubkey);
 
@@ -180,40 +179,8 @@ const MapView = () => {
     return <NotFound />;
   }
 
-  // Gate: no sync server running → blocked for all maps
-  if (!lineLoading && isUnguarded) {
-    return (
-      <div className="min-h-screen bg-background">
-        <SiteHeader />
-        <div className="container py-20">
-          <Card className="max-w-lg mx-auto border-dashed">
-            <CardContent className="py-16 px-8 text-center">
-              <div className="space-y-6">
-                <div className="mx-auto w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                  <Lock className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <div className="space-y-2">
-                  <h2 className="text-xl font-bold">No Sync Server</h2>
-                  <p className="text-muted-foreground">
-                    No sync server is running for this map right now.
-                    Please try again later or start a guardian node to enter.
-                  </p>
-                </div>
-                <Link to="/world">
-                  <Button variant="outline" className="gap-2">
-                    <ArrowLeft className="h-4 w-4" />
-                    Back to World Map
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  const offlineMode = false;
+  // Offline mode: no sync server and no ?sync= override → explore only (no multiplayer)
+  const offlineMode = !syncOverride && !lineLoading && isUnguarded;
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
