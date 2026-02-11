@@ -130,29 +130,34 @@ export function useMapSyncServers({
     queryFn: async () => {
       if (mapId === undefined) return [];
 
-      // Query heartbeat events for this map
-      // We query both specific map tags and "serves all" nodes
+      // Query all heartbeat events using only single-letter tag filters.
+      // Multi-letter tags like #map and #serves are NOT indexed by relays,
+      // so we fetch all heartbeats and filter client-side.
       const events = await nostr.query([
         {
           kinds: [10311],
           '#t': ['3d-scene-sync'],
-          '#map': [mapId.toString()],
-          limit: 20,
-        },
-        {
-          kinds: [10311],
-          '#t': ['3d-scene-sync'],
-          '#serves': ['all'],
-          limit: 20,
+          limit: 200,
         },
       ]);
 
-      debugLog(`query returned ${events.length} heartbeat events for map ${mapId}`);
+      debugLog(`query returned ${events.length} heartbeat events, filtering for map ${mapId}`);
+
+      // Client-side filter: keep events that either have a 'map' tag matching
+      // our mapId, or have 'serves' = 'all' (indicating they handle any map).
+      const mapIdStr = mapId.toString();
+      const relevantEvents = events.filter((event) => {
+        const hasMapTag = event.tags.some(([name, val]) => name === 'map' && val === mapIdStr);
+        const servesAll = event.tags.some(([name, val]) => name === 'serves' && val === 'all');
+        return hasMapTag || servesAll;
+      });
+
+      debugLog(`  ${relevantEvents.length} events relevant to map ${mapId}`);
 
       // Parse and deduplicate by syncUrl (keep latest per server)
       const serversByUrl = new Map<string, SyncServerInfo>();
 
-      for (const event of events) {
+      for (const event of relevantEvents) {
         const info = parseHeartbeatEvent(event, mapId);
         if (!info) {
           debugLog('  skipped event (invalid/stale/offline):', event.pubkey?.slice(0, 8), event.created_at);
