@@ -145,23 +145,15 @@ export function useMapSyncServers({
         },
       ]);
 
-      debugLog(`query returned ${events.length} heartbeat events, filtering for map ${mapId}`);
+      debugLog(`query returned ${events.length} heartbeat events for map ${mapId}`);
 
-      // Client-side filter: keep events that either have a 'map' tag matching
-      // our mapId, or have 'serves' = 'all' (indicating they handle any map).
-      const mapIdStr = mapId.toString();
-      const relevantEvents = events.filter((event) => {
-        const hasMapTag = event.tags.some(([name, val]) => name === 'map' && val === mapIdStr);
-        const servesAll = event.tags.some(([name, val]) => name === 'serves' && val === 'all');
-        return hasMapTag || servesAll;
-      });
-
-      debugLog(`  ${relevantEvents.length} events relevant to map ${mapId}`);
+      // Sync servers serve ALL maps — no per-map filtering needed.
+      // Any active sync server can handle any map.
 
       // Parse and deduplicate by syncUrl (keep latest per server)
       const serversByUrl = new Map<string, SyncServerInfo>();
 
-      for (const event of relevantEvents) {
+      for (const event of events) {
         const info = parseHeartbeatEvent(event, mapId);
         if (!info) {
           debugLog('  skipped event (invalid/stale/offline):', event.pubkey?.slice(0, 8), event.created_at);
