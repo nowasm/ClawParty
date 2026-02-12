@@ -17,8 +17,13 @@
  *   NODE_REGION       - Region identifier for this node (e.g., "asia-east")
  *   MAX_PLAYERS       - Maximum total players across all rooms (default: 200)
  *   TARGET_MAPS       - How many frontier maps to guard beyond the start map (default: 5)
+ *   TLS_CERT          - Path to TLS certificate file (enables wss://)
+ *   TLS_KEY           - Path to TLS private key file (enables wss://)
  */
 
+import { readFileSync } from 'fs';
+import { createServer as createHttpsServer } from 'https';
+import { createServer as createHttpServer } from 'http';
 import { WebSocketServer } from 'ws';
 import type { WebSocket } from 'ws';
 import { RoomManager } from './roomManager.js';
@@ -37,6 +42,8 @@ const SYNC_URL = process.env.SYNC_URL ?? '';
 const NODE_REGION = process.env.NODE_REGION ?? '';
 const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS ?? '200', 10);
 const NOSTR_SECRET_KEY = process.env.NOSTR_SECRET_KEY ?? '';
+const TLS_CERT = process.env.TLS_CERT ?? '';
+const TLS_KEY = process.env.TLS_KEY ?? '';
 const CLEANUP_INTERVAL_MS = 30000; // Clean up idle connections every 30s
 const MAX_IDLE_MS = 120000; // Disconnect after 2 minutes of inactivity
 
@@ -87,7 +94,28 @@ const servedMaps: 'all' | number[] = servedMapsConfig === 'auto' ? 'all' : serve
 // Server Setup
 // ============================================================================
 
-const wss = new WebSocketServer({ port: PORT, host: HOST });
+// Determine TLS mode: if both TLS_CERT and TLS_KEY are provided, run wss://
+const tlsEnabled = !!(TLS_CERT && TLS_KEY);
+let httpServer: ReturnType<typeof createHttpsServer> | ReturnType<typeof createHttpServer> | null = null;
+let wss: WebSocketServer;
+
+if (tlsEnabled) {
+  try {
+    const cert = readFileSync(TLS_CERT);
+    const key = readFileSync(TLS_KEY);
+    httpServer = createHttpsServer({ cert, key });
+    wss = new WebSocketServer({ server: httpServer });
+    httpServer.listen(PORT, HOST);
+  } catch (err) {
+    console.error(`[TLS] Failed to read certificate files:`);
+    console.error(`  TLS_CERT: ${TLS_CERT}`);
+    console.error(`  TLS_KEY:  ${TLS_KEY}`);
+    console.error(`  Error: ${(err as Error).message}`);
+    process.exit(1);
+  }
+} else {
+  wss = new WebSocketServer({ port: PORT, host: HOST });
+}
 const roomManager = new RoomManager({ servedMaps });
 roomManager.start();
 
@@ -241,7 +269,9 @@ wss.on('connection', (ws, req) => {
   ws.on('error', onError);
 });
 
-wss.on('listening', async () => {
+/** Startup banner and announcer init — called once the server is listening */
+async function onListening(): Promise<void> {
+  const proto = tlsEnabled ? 'wss' : 'ws';
   const mapDisplay = servedMapsConfig === 'all'
     ? 'ALL (10,000 maps)'
     : servedMapsConfig === 'auto'
@@ -252,7 +282,8 @@ wss.on('listening', async () => {
   console.log('='.repeat(60));
   console.log('  ClawParty Lobster Guardian');
   console.log('='.repeat(60));
-  console.log(`  WebSocket:   ws://${HOST}:${PORT}`);
+  console.log(`  WebSocket:   ${proto}://${HOST}:${PORT}`);
+  console.log(`  TLS:         ${tlsEnabled ? 'ENABLED' : 'disabled'}`);
   console.log(`  Sync URL:    ${SYNC_URL || '(not set)'}`);
   console.log(`  Served Maps: ${mapDisplay}`);
   console.log(`  Max Players: ${MAX_PLAYERS}`);
@@ -281,7 +312,15 @@ wss.on('listening', async () => {
 
   console.log('');
   console.log('Guarding maps, waiting for players...');
-});
+}
+
+// When TLS is enabled, the 'listening' event fires on httpServer, not on wss.
+// When TLS is disabled, wss creates its own internal server and emits 'listening'.
+if (httpServer) {
+  httpServer.on('listening', onListening);
+} else {
+  wss.on('listening', onListening);
+}
 
 // Periodic cleanup of idle connections
 const cleanupTimer = setInterval(() => {
@@ -310,8 +349,15 @@ async function shutdown() {
 
   roomManager.destroy();
   wss.close(() => {
-    console.log('Server closed.');
-    process.exit(0);
+    if (httpServer) {
+      httpServer.close(() => {
+        console.log('Server closed.');
+        process.exit(0);
+      });
+    } else {
+      console.log('Server closed.');
+      process.exit(0);
+    }
   });
 }
 

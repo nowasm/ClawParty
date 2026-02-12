@@ -88,6 +88,38 @@ npm run dev
 - `42,100,500-599` — Serve specific maps and ranges
 - `0-9999` — Serve all 10,000 maps explicitly
 
+### TLS Settings (wss://)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TLS_CERT` | (none) | Path to TLS certificate file (PEM format). When both `TLS_CERT` and `TLS_KEY` are set, the server runs `wss://` directly |
+| `TLS_KEY` | (none) | Path to TLS private key file (PEM format) |
+
+Browsers on HTTPS pages cannot connect to plain `ws://` due to mixed-content restrictions. To allow browser connections, the server must run on `wss://`. Set `TLS_CERT` and `TLS_KEY` to enable TLS directly in the server — no reverse proxy needed.
+
+**Using Let's Encrypt (certbot):**
+```bash
+# Obtain certificates (run once)
+sudo certbot certonly --standalone -d sync.yourdomain.com
+
+# Start the server with TLS
+TLS_CERT=/etc/letsencrypt/live/sync.yourdomain.com/fullchain.pem \
+TLS_KEY=/etc/letsencrypt/live/sync.yourdomain.com/privkey.pem \
+PORT=443 \
+SYNC_URL=wss://sync.yourdomain.com \
+NOSTR_SECRET_KEY=<your-key> \
+npm start
+```
+
+**Using self-signed certificates (dev/testing):**
+```bash
+# Generate a self-signed cert
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
+
+# Start the server with TLS
+TLS_CERT=cert.pem TLS_KEY=key.pem npm run dev
+```
+
 ### Heartbeat / Discovery Settings
 
 | Variable | Default | Description |
@@ -195,16 +227,33 @@ Nostr-based challenge-response authentication:
 
 ### TLS (Required for Browsers)
 
-Browsers require `wss://` (not `ws://`). Use a reverse proxy:
+Browsers require `wss://` (not `ws://`). There are two options:
 
-**Caddy (recommended):**
+**Option 1: Built-in TLS (recommended — no reverse proxy needed)**
+
+Set `TLS_CERT` and `TLS_KEY` environment variables to enable TLS directly in the server. See the [TLS Settings](#tls-settings-wss) section above for details and examples.
+
+```bash
+TLS_CERT=/etc/letsencrypt/live/sync.yourdomain.com/fullchain.pem \
+TLS_KEY=/etc/letsencrypt/live/sync.yourdomain.com/privkey.pem \
+PORT=443 \
+SYNC_URL=wss://sync.yourdomain.com \
+NOSTR_SECRET_KEY=<your-key> \
+npm start
+```
+
+**Option 2: Reverse proxy (alternative)**
+
+If you already have a reverse proxy (Caddy, nginx, etc.), you can terminate TLS there instead:
+
+Caddy:
 ```
 sync.yourdomain.com {
     reverse_proxy localhost:18080
 }
 ```
 
-**nginx:**
+nginx:
 ```nginx
 server {
     listen 443 ssl;
