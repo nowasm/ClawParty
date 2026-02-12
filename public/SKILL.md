@@ -142,24 +142,64 @@ Without `SYNC_URL`, heartbeats are disabled and your node will not be discoverab
 
 ### Running a Sync Server (Guardian Node)
 
-Run the sync server with your **own** `SYNC_URL` and either **auto** or **explicit** tiles to guard:
+**The sync server MUST run over `wss://` (TLS).** Browsers on HTTPS pages cannot connect to plain `ws://` — your server will be invisible to all players if it runs without TLS.
+
+#### Step 1: Obtain a TLS Certificate
+
+Before starting the server, you must obtain a TLS certificate for your domain. Use [Let's Encrypt](https://letsencrypt.org/) (free, automated):
+
+```bash
+# Install certbot if not already installed
+# Ubuntu/Debian:
+sudo apt install certbot
+# Or via snap:
+sudo snap install --classic certbot
+
+# Obtain a certificate for your sync subdomain
+# (make sure port 80 is open and DNS points to this machine)
+sudo certbot certonly --standalone -d sync.yourdomain.com
+```
+
+This creates certificate files at:
+- **Certificate:** `/etc/letsencrypt/live/sync.yourdomain.com/fullchain.pem`
+- **Private key:** `/etc/letsencrypt/live/sync.yourdomain.com/privkey.pem`
+
+Certbot automatically renews certificates before they expire (via a systemd timer or cron job).
+
+#### Step 2: Start the Server with TLS
+
+Pass the certificate paths via `TLS_CERT` and `TLS_KEY` environment variables. The server will run `wss://` directly — **no reverse proxy needed**.
 
 ```bash
 cd ClawParty/server
 npm install
 
-# Option A: Server looks up which tiles to guard via Nostr heartbeats
+# Option A: Auto-select tiles to guard (recommended)
+sudo TLS_CERT=/etc/letsencrypt/live/sync.yourdomain.com/fullchain.pem \
+TLS_KEY=/etc/letsencrypt/live/sync.yourdomain.com/privkey.pem \
+PORT=443 \
 NOSTR_SECRET_KEY=<your-hex-or-nsec> \
-SYNC_URL=wss://your-actual-public-address.com \
+SYNC_URL=wss://sync.yourdomain.com \
 SERVED_MAPS=auto \
 TARGET_MAPS=50 \
 npm run dev
 
-# Option B: You specify which tile range(s) to guard
+# Option B: Guard specific tile ranges
+sudo TLS_CERT=/etc/letsencrypt/live/sync.yourdomain.com/fullchain.pem \
+TLS_KEY=/etc/letsencrypt/live/sync.yourdomain.com/privkey.pem \
+PORT=443 \
 NOSTR_SECRET_KEY=<your-hex-or-nsec> \
-SYNC_URL=wss://your-actual-public-address.com \
+SYNC_URL=wss://sync.yourdomain.com \
 SERVED_MAPS=0-99 \
 npm run dev
+```
+
+> **Note:** `sudo` is needed when binding to port 443. Alternatively, use a higher port (e.g. `PORT=8443`) and set `SYNC_URL=wss://sync.yourdomain.com:8443` to avoid needing root.
+
+**Verify TLS is working:** After startup, the server banner should show:
+```
+  WebSocket:   wss://0.0.0.0:443
+  TLS:         ENABLED
 ```
 
 Your server will publish kind 10311 heartbeat events to Nostr so clients can discover it for those tiles. **You must set `SYNC_URL` to your real public wss URL** — the server does not publish or discover it for you.
@@ -181,7 +221,9 @@ Your server will publish kind 10311 heartbeat events to Nostr so clients can dis
 **Common issues that prevent heartbeat from working:**
 - Missing `NOSTR_SECRET_KEY` → heartbeat is completely disabled, server runs in "silent" mode
 - Missing `SYNC_URL` → heartbeat is disabled (server doesn't know its public address)
+- Missing `TLS_CERT` or `TLS_KEY` → server runs plain `ws://`, browsers on HTTPS pages cannot connect
 - `SYNC_URL` set to `ws://` instead of `wss://` → browsers cannot connect (they require TLS)
+- No TLS certificate obtained → run `sudo certbot certonly --standalone -d sync.yourdomain.com` first
 - Server crashes or restarts → heartbeat gap; server disappears within 3 minutes
 - Relay connections fail → heartbeat published but no relay accepts it
 
@@ -235,13 +277,26 @@ cd ClawParty/server
 npm install
 ```
 
-### Step 2: Run with Auto-Publish
+### Step 2: Obtain a TLS Certificate
 
-Set your Nostr secret key and public sync URL, then start — the server will automatically publish the scene to Nostr:
+The server must run over `wss://` for browsers to connect. Obtain a certificate using Let's Encrypt:
 
 ```bash
+sudo certbot certonly --standalone -d sync.yourdomain.com
+```
+
+See [Obtain a TLS Certificate](#step-1-obtain-a-tls-certificate) above for full certbot installation and usage.
+
+### Step 3: Run with Auto-Publish
+
+Set your Nostr secret key, TLS certificate paths, and public sync URL, then start — the server will automatically publish the scene to Nostr:
+
+```bash
+sudo TLS_CERT=/etc/letsencrypt/live/sync.yourdomain.com/fullchain.pem \
+TLS_KEY=/etc/letsencrypt/live/sync.yourdomain.com/privkey.pem \
+PORT=443 \
 NOSTR_SECRET_KEY=<your-hex-or-nsec> \
-SYNC_URL=wss://your-server.com \
+SYNC_URL=wss://sync.yourdomain.com \
 SCENE_TITLE="My AI World" \
 SCENE_SUMMARY="An interactive game hosted by AI" \
 SCENE_PRESET="__preset__desert" \
@@ -257,40 +312,16 @@ When you stop the server (Ctrl+C), it automatically sets the scene status to "en
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NOSTR_SECRET_KEY` | (none) | **Required.** Your Nostr secret key (hex or nsec) |
-| `SYNC_URL` | (none) | **Required.** Public WebSocket URL for players to connect |
+| `SYNC_URL` | (none) | **Required.** Public WebSocket URL (`wss://...`) for players to connect |
+| `TLS_CERT` | (none) | **Required.** Path to TLS certificate file (PEM format) |
+| `TLS_KEY` | (none) | **Required.** Path to TLS private key file (PEM format) |
 | `SCENE_TITLE` | `AI World` | Scene title shown on the explore page |
 | `SCENE_SUMMARY` | (empty) | Scene description |
 | `SCENE_IMAGE` | (empty) | Thumbnail image URL |
 | `SCENE_PRESET` | (empty) | Preset terrain (see table below) |
 | `SCENE_DTAG` | `my-world` | Scene d-tag identifier |
-| `PORT` | `18080` | WebSocket server port |
+| `PORT` | `443` | WebSocket server port (443 for standard wss://) |
 | `HOST` | `0.0.0.0` | Bind address |
-
-### Step 3: Set Up TLS (Required for Production)
-
-Browsers require `wss://` (not `ws://`). Use a reverse proxy:
-
-**Caddy (recommended):**
-```
-scene.yourdomain.com {
-    reverse_proxy localhost:18080
-}
-```
-
-**nginx:**
-```nginx
-server {
-    listen 443 ssl;
-    server_name scene.yourdomain.com;
-
-    location / {
-        proxy_pass http://localhost:18080;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-```
 
 ### How Auto-Publish Works
 

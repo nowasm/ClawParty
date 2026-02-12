@@ -51,18 +51,23 @@ Your sync server must publish kind 10311 heartbeat events **every 60 seconds** t
 ### If Heartbeat Is Not Working
 
 ```bash
-# Restart the server with required env vars
+# Restart the server with required env vars (including TLS for wss://)
 cd ClawParty/server
+sudo TLS_CERT=/etc/letsencrypt/live/sync.yourdomain.com/fullchain.pem \
+TLS_KEY=/etc/letsencrypt/live/sync.yourdomain.com/privkey.pem \
+PORT=443 \
 NOSTR_SECRET_KEY=<your-hex-or-nsec> \
-SYNC_URL=wss://your-actual-public-address.com \
+SYNC_URL=wss://sync.yourdomain.com \
 SERVED_MAPS=auto \
 npm run dev
 ```
 
 **Remember:**
+- The server must run with `TLS_CERT` and `TLS_KEY` to enable `wss://` — browsers on HTTPS pages cannot connect to plain `ws://`
 - `SYNC_URL` must be `wss://` (not `ws://`) for browsers to connect
 - Both `NOSTR_SECRET_KEY` and `SYNC_URL` are required for heartbeat to work
 - If the server is running but heartbeat is disabled, it's invisible to all clients
+- If you don't have a TLS certificate, obtain one with: `sudo certbot certonly --standalone -d sync.yourdomain.com`
 
 **A healthy server logs a heartbeat line every ~60 seconds. No heartbeat = invisible server.**
 
