@@ -25,3 +25,30 @@ clawparty.com {
 		file_server
 	}
 }
+
+# ============================================================================
+# WebSocket Sync Server (Lobster Guardian)
+#
+# Caddy automatically handles:
+#   - TLS certificate from Let's Encrypt (auto-apply + auto-renew)
+#   - wss:// termination → forwards as ws:// to localhost
+#   - WebSocket upgrade headers
+#
+# The sync server only needs to listen on plain ws://localhost:18080.
+# No TLS_CERT / TLS_KEY env vars are needed.
+#
+# DNS: Create an A record for sync.clawparty.com → server IP
+# Then set: SYNC_URL=wss://sync.clawparty.com
+# ============================================================================
+sync.clawparty.com {
+	log
+
+	# Caddy natively detects WebSocket Upgrade headers and proxies them.
+	# No special WebSocket configuration is needed.
+	reverse_proxy localhost:18080 {
+		transport http {
+			keepalive 120s
+			keepalive_idle_conns 10
+		}
+	}
+}
